@@ -220,7 +220,7 @@ These are the "installed" versions that bdep.lock will be generated from.
 b config.lockfile.gen=true lockfile/
 ```
 
-Inspect the result (backlink in source dir):
+Inspect the result (written directly to the source directory):
 
 ```sh
 cat lockfile/bdep.lock
@@ -304,11 +304,14 @@ b config.lockfile.gen=true lockfile/
 # Case 15: configure meta-op
 sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock
 b configure:                                          # expect: no enforcement
+# Note: build2 will also error "dir{} does not support meta-operation configure"
+# -- that is a separate build2 issue, not a lockfile failure.
 b config.lockfile.gen=true lockfile/
 
 # Case 16: disfigure
 sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock
 b disfigure:                                          # expect: no enforcement
+# Note: same "dir{} does not support meta-operation disfigure" error expected.
 b configure: "$BUILD_DIR/"                            # re-configure after disfigure
 b config.lockfile.gen=true lockfile/
 

@@ -203,7 +203,7 @@ and is a key target for lockfile enforcement tests.
 - Have `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1` configured in
   `@<cfg>-external`.
 - Run `b config.lockfile.gen=true lockfile/`.
-- Inspect `lockfile/bdep.lock` (accessible via the backlink symlink).
+- Inspect `lockfile/bdep.lock` (written directly to the source directory).
 - Expect:
   - Contains `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1`.
   - Does not contain project-local packages (`libhello`, `libworld`, etc.).
