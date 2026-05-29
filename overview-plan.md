@@ -113,6 +113,16 @@ bpkg cfg-create \
   cc
 ```
 
+Then register the upstream package repositories so that `bpkg pkg-build` can
+resolve packages by plain `name/version` (without the `?` prefix). This is
+required by the lockfile enforcement machinery.
+
+```sh
+bpkg rep-add https://pkg.cppget.org/1/stable https://pkg.cppget.org/1/testing \
+  -d "$BUILD_DIR_EXT"
+bpkg rep-fetch -d "$BUILD_DIR_EXT"
+```
+
 ### 3.5 Clean dangling links
 
 ```sh
@@ -375,7 +385,9 @@ b config.lockfile.gen=true lockfile/
 # Case 11: host config skip
 # Add any host tool that is already configured in @host to bdep.lock at a
 # different version. Run b and confirm no bpkg call targets $BUILD_DIR_HOST.
-# (Requires a host-type tool to be present; skip if @host has no packages.)
+# NOTE: @host has no packages in the standard setup (host tools are managed
+# by the toolchain, not bpkg). This case cannot be run without a host-type
+# package. Skip if @host reports "no packages in the configuration".
 
 # Case 14: CRLF line endings
 b config.lockfile.gen=true lockfile/
@@ -387,8 +399,12 @@ b      # expect: sed strips CR, enforcement runs, fmt corrected
 b config.lockfile.gen=true lockfile/
 
 # Case 19: testing-repo version
-# Install fmt from the testing repo at 11.1.4
-bpkg pkg-build --yes ?fmt/11.1.4 -d "$BUILD_DIR_EXT"
+# NOTE: spdlog/1.14.1+2 constrains fmt to ^10.1.1 (compatible, no major bump).
+# The testing-repo fmt versions (11.1.4, 11.0.2) exceed this constraint, so
+# bpkg refuses to install them alongside the current spdlog. To run this case,
+# first upgrade spdlog to a version that accepts fmt ^11, or drop spdlog from
+# the external config, then restore afterwards.
+bpkg pkg-build --yes fmt/11.1.4 -d "$BUILD_DIR_EXT"
 b config.lockfile.gen=true lockfile/
 cat lockfile/bdep.lock   # expect: fmt/11.1.4
 b                        # expect: no-op
@@ -415,13 +431,35 @@ b                                            # must be a no-op immediately after
 
 ### Group E: Multi-config (cases 21-22)
 
-These require a package to exist in two separate non-host configurations. In the
+NOTE: The lockfile enforcer discovers configurations by matching lines from
+`bdep status` that contain `[cfg-path]` brackets. These are packages from
+LINKED configurations only. Packages installed directly into the main bpkg
+config (`@<cfg>`) do not appear with brackets in `bdep status` output and are
+therefore invisible to the enforcer. Installing a package into `@<cfg>` via
+`bpkg pkg-build -d "$BUILD_DIR"` does not result in a second bpkg-build call.
+
+To exercise the two-config dispatch path you need a second external bpkg
+configuration linked to the project (e.g. `@<cfg>-extra`) that also contains
+a pinned package. Create it with `bpkg cfg-create` + `bpkg cfg-link`, install a
+package there, and then pin it in `bdep.lock`. The standard three-config
+topology cannot demonstrate this path.
+
+These cases require a package to exist in two separate non-host configurations. In the
 standard three-config topology, all third-party deps land in `@<cfg>-external`
-and all project packages in `@<cfg>`. To exercise this path, temporarily move
-one package (e.g. by initializing `catch2` directly into `@<cfg>` with
-`bpkg pkg-build --yes catch2/3.7.1 -d "$BUILD_DIR"`) so it appears in both.
-Then pin it in bdep.lock and run `b`. Confirm two `bpkg pkg-build` calls and
-exactly one `bdep sync`.
+and all project packages in `@<cfg>`. To exercise this path, create a second
+external config linked to the main:
+
+```sh
+bpkg cfg-create --name "${CONFIG_NAME}-extra" --directory "${BUILD_DIR}-extra" cc
+bpkg rep-add https://pkg.cppget.org/1/stable -d "${BUILD_DIR}-extra"
+bpkg rep-fetch --trust-yes -d "${BUILD_DIR}-extra"
+bpkg cfg-link --directory "$BUILD_DIR" "${BUILD_DIR}-extra" --relative
+bpkg pkg-build --yes catch2/3.5.1+1 -d "${BUILD_DIR}-extra"
+bdep config add --directory "$PROJECT_DIR" @"${CONFIG_NAME}-extra" "${BUILD_DIR}-extra" --no-default --no-forward
+```
+
+Then pin catch2 in bdep.lock and run `b`. Confirm two `bpkg pkg-build` calls
+(one per config) and exactly one `bdep sync`.
 
 ---
 
@@ -501,9 +539,9 @@ b
 # 3. If bpkg state is corrupt, reinstall all external deps at the versions
 #    that bdep.lock will subsequently pin:
 bpkg pkg-build --yes \
-  ?fmt/10.2.1 \
-  ?spdlog/1.14.1+2 \
-  ?catch2/3.7.1 \
+  fmt/10.2.1 \
+  spdlog/1.14.1+2 \
+  catch2/3.7.1 \
   -d "$BUILD_DIR_EXT"
 
 # 4. Regenerate lockfile to match the freshly installed state

@@ -67,6 +67,17 @@ bpkg cfg-create \
     cc
 ```
 
+Then register the upstream package repositories. This is required so that
+the lockfile enforcement machinery can resolve packages by plain `name/version`
+without the `?` prefix (which only works for packages that already have
+dependents in the same configuration).
+
+```sh
+bpkg rep-add https://pkg.cppget.org/1/stable https://pkg.cppget.org/1/testing \
+    -d "$BUILD_DIR_EXT"
+bpkg rep-fetch -d "$BUILD_DIR_EXT"
+```
+
 ---
 
 ## 3. Clean dangling links

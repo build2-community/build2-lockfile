@@ -119,23 +119,19 @@ if ($build.mode         != 'skeleton'    && \
                 # that configuration, keeping all same-configuration dependents
                 # in place and reconfiguring them against the new versions.
                 #
-                # The ? (dependency) prefix is required because linked
-                # configurations typically only have the project directory as a
-                # directly-registered repository and do not have the upstream
-                # package repositories registered.  The ? prefix instructs bpkg
-                # to search prerequisite repositories of existing dependents in
-                # this configuration, which do include the upstream repos.
-                #
                 # --no-move prevents bpkg from trying to reorganize packages
                 # across configurations when the project-directory repository
                 # registered in this configuration makes project packages
                 # visible here while they are already configured elsewhere.
-                dep_pins = [null]
-                for pin: $pending_pins
-                  dep_pins += "?$pin"
-
+                #
+                # Plain name/version arguments require the upstream package
+                # repositories (pkg.cppget.org) to be registered in the
+                # configuration. The ? (dependency-repo-search) prefix is NOT
+                # used because it fails for packages that have no dependents in
+                # the same configuration (e.g. catch2, which is a test dep of
+                # project packages that live in the main config, not here).
                 ignored = $process.run(\
-                  bpkg pkg-build --yes --no-move $dep_pins -d "$lcfg")
+                  bpkg pkg-build --yes --no-move $pending_pins -d "$lcfg")
 
                 changed = true
               }
