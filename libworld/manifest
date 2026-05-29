@@ -11,4 +11,5 @@ email: user@email.com
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
 depends: libhello == $
+depends: spdlog >= 1.11.0
 tests: libworld-tests == $

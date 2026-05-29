@@ -10,14 +10,17 @@ Packages are available from:
 
 | Package | Third-party dep | Rationale |
 |---------|----------------|-----------|
-| libhello | `fmt` | String formatting (implementation-only, private) |
+| libhello | `fmt` | String formatting (interface dep -- exported to consumers) |
 | libworld | `spdlog` | Logging (implementation-only, private); depends on `fmt` transitively |
 | libhello-tests | `catch2` | Test framework |
 | libworld-tests | `catch2` | Test framework |
 | lockfile | -- | No change needed |
 
-`fmt` and `spdlog` are interface-independent implementation details, so both
-go into `impl_libs`. `catch2` is linked directly into the test executables.
+`fmt` is an interface dependency of `libhello` (`intf_libs`) -- it is exported
+to consumers, so `libworld` picks it up transitively through `libhello`. This
+creates a transitive chain (`libworld` -> `libhello` -> `fmt`) that exercises
+the lockfile machinery more thoroughly. `spdlog` is implementation-only
+(`impl_libs`). `catch2` is linked directly into the test executables.
 
 ---
 
@@ -77,14 +80,16 @@ Use `>= 3.3.0` as the manifest constraint. Lockfile tests can cycle among
 depends: fmt >= 10.0.0
 ```
 
-**`libhello/libhello/buildfile`** -- replace the empty `impl_libs` line:
+**`libhello/libhello/buildfile`** -- add to `intf_libs` (exported to consumers):
 ```
 # before
+intf_libs = # Interface dependencies.
 impl_libs = # Implementation dependencies.
 
 # after
-impl_libs =
-import impl_libs += fmt%lib{fmt}
+intf_libs = # Interface dependencies.
+impl_libs = # Implementation dependencies.
+import intf_libs += fmt%lib{fmt}
 ```
 
 ---

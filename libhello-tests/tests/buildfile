@@ -1,5 +1,6 @@
 libs =
 import libs += libhello%lib{hello}
+import libs += catch2%lib{catch2}
 
 exe{libhello-tests}: {hxx ixx txx cxx}{**} $libs testscript
 

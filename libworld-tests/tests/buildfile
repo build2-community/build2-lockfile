@@ -1,5 +1,6 @@
 libs =
 import libs += libworld%lib{world}
+import libs += catch2%lib{catch2}
 
 exe{libworld-tests}: {hxx ixx txx cxx}{**} $libs testscript
 
