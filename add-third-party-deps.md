@@ -13,21 +13,21 @@ Packages are available from:
 | libhello | `fmt` | String formatting (interface dep -- exported to consumers) |
 | libhello | `xxd` | Build-time tool (host dep -- exercises the host-skip path in lockfile) |
 | libworld | `spdlog` | Logging (implementation-only, private); depends on `fmt` transitively |
-| libhello-tests | `catch2` | Test framework |
 | libhello-tests | `entt` | Header-only ECS library (exercises testing-repo version pinning, case 19) |
-| libworld-tests | `catch2` | Test framework |
+| libworld-tests | `entt` | Header-only dep for test package (same lib, fast to build) |
 | lockfile | -- | No change needed |
 
 `fmt` is an interface dependency of `libhello` (`intf_libs`) -- it is exported
 to consumers, so `libworld` picks it up transitively through `libhello`. This
 creates a transitive chain (`libworld` -> `libhello` -> `fmt`) that exercises
 the lockfile machinery more thoroughly. `spdlog` is implementation-only
-(`impl_libs`). `catch2` is linked directly into the test executables.
+(`impl_libs`). `entt` is linked into the test executables and is header-only,
+so it installs fast. It also has multiple stable versions (3.13.x, 3.14.0) and
+testing versions (3.15.0, 3.16.0), which exercises both the batch-pinning tests
+(cases 6, 9) and the testing-repo version round-trip (case 19).
 `xxd` is a build-time tool (`depends: * xxd`) and is installed in the host
 configuration. The lockfile enforcer must skip host configs, and xxd provides
-a real package there to pin incorrectly for that test. `entt` is a header-only
-library with no deps and versions that span both stable (3.14.0) and testing
-(3.15.0, 3.16.0), making it ideal for case 19 (testing-repo version round-trip).
+a real package there to pin incorrectly for that test.
 
 ---
 
@@ -65,17 +65,6 @@ constrains which `fmt` versions are compatible within the same configuration.
 Use `>= 1.11.0` as the manifest constraint. Lockfile tests can cycle among
 1.14.1+2, 1.12.0, and 1.11.0+1.
 
-### catch2
-
-| Version | Notes |
-|---------|-------|
-| 3.7.1 | latest stable |
-| 3.5.1+1 | |
-| 3.3.2 | |
-
-Use `>= 3.3.0` as the manifest constraint. Lockfile tests can cycle among
-3.7.1, 3.5.1+1, and 3.3.2.
-
 ### xxd
 
 Build-time tool. Only one version is available in the stable repo: `8.2.3075+2`.
@@ -95,8 +84,10 @@ Header-only ECS library, no deps, no version constraints from other packages.
 | 3.13.2 | stable |
 | 3.13.0 | stable |
 
-Use `>= 3.14.0` as the manifest constraint. Lockfile tests for case 19 cycle
-between a stable version (3.14.0) and a testing version (3.15.0 or 3.16.0).
+Use `>= 3.13.0` as the manifest constraint. Lockfile tests cycle among stable
+versions (3.13.x, 3.14.0) for batch-pinning tests (cases 6, 9) and between
+3.14.0 and a testing version (3.15.0 or 3.16.0) for the round-trip test
+(case 19).
 
 ---
 
@@ -152,11 +143,10 @@ import impl_libs += spdlog%lib{spdlog}
 
 **`libhello-tests/manifest`** -- add after the existing `depends:` lines:
 ```
-depends: catch2 >= 3.3.0
-depends: entt >= 3.14.0
+depends: entt >= 3.13.0
 ```
 
-**`libhello-tests/tests/buildfile`** -- add imports alongside the existing one:
+**`libhello-tests/tests/buildfile`** -- add import alongside the existing one:
 ```
 # before
 libs =
@@ -165,7 +155,6 @@ import libs += libhello%lib{hello}
 # after
 libs =
 import libs += libhello%lib{hello}
-import libs += catch2%lib{catch2}
 import libs += entt%lib{entt}
 ```
 
@@ -175,7 +164,7 @@ import libs += entt%lib{entt}
 
 **`libworld-tests/manifest`** -- add after the existing `depends:` lines:
 ```
-depends: catch2 >= 3.3.0
+depends: entt >= 3.13.0
 ```
 
 **`libworld-tests/tests/buildfile`** -- add import alongside the existing one:
@@ -187,7 +176,7 @@ import libs += libworld%lib{world}
 # after
 libs =
 import libs += libworld%lib{world}
-import libs += catch2%lib{catch2}
+import libs += entt%lib{entt}
 ```
 
 ---
@@ -195,7 +184,7 @@ import libs += catch2%lib{catch2}
 ## Notes
 
 - The exact `bpkg` target names (`fmt%lib{fmt}`, `spdlog%lib{spdlog}`,
-  `catch2%lib{catch2}`) should be verified with `bpkg rep-info` or by
+  `entt%lib{entt}`) should be verified with `bpkg rep-info` or by
   inspecting the packages' own buildfiles after fetching.
 - Because `spdlog` depends on `fmt`, both will land in the same external
   configuration. This means a single `bdep.lock` entry for `fmt` pins the

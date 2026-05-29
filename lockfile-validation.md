@@ -19,8 +19,8 @@ host-skip path, and the `bdep sync` re-configuration step.
 ```
 libhello  --(intf)-->  fmt        (external config)
 libworld  --(impl)-->  spdlog     (external config, depends on fmt)
-libhello-tests         catch2     (external config)
-libworld-tests         catch2     (external config)
+libhello-tests         entt       (external config)
+libworld-tests         entt       (external config)
 ```
 
 `fmt` is an interface dependency of `libhello`, so it is exported transitively
@@ -40,7 +40,7 @@ and is a key target for lockfile enforcement tests.
 2. External packages fetched and configured in `@<cfg>-external`:
    - `fmt` (versions available: 11.1.4 testing, 11.0.2 testing, 10.2.1, 10.1.1, 10.0.0, 9.1.0)
    - `spdlog` (versions available: 1.14.1+2, 1.12.0, 1.11.0+1)
-   - `catch2` (versions available: 3.7.1, 3.5.1+1, 3.3.2)
+   - `entt` (versions available: 3.16.0 testing, 3.15.0 testing, 3.14.0, 3.13.2, 3.13.0)
 
 3. `lockfile` package initialized in the main config and `bdep.lock` present in
    `lockfile/`.
@@ -92,16 +92,17 @@ and is a key target for lockfile enforcement tests.
 
 ### 6. Multiple packages in same configuration, both mismatched
 
-- Install `fmt` at 10.2.1 and `catch2` at 3.7.1 in `@<cfg>-external`.
+- Install `fmt` at 10.2.1 and `entt` at 3.14.0 in `@<cfg>-external`.
 - Write `lockfile/bdep.lock`:
   ```
+  entt/3.13.2
   fmt/10.1.1
-  catch2/3.5.1+1
+  spdlog/1.14.1+2
   ```
 - Run `b`.
 - Expect:
   - Two diagnostics (one per package).
-  - A single `bpkg pkg-build --yes --no-move ?fmt/10.1.1 ?catch2/3.5.1+1 -d <ext-cfg>`
+  - A single `bpkg pkg-build --yes --no-move fmt/10.1.1 entt/3.13.2 -d <ext-cfg>`
     call (both pins batched into one invocation for the same config).
   - `bdep sync --yes` called once.
 - Verify both are at pinned versions.
@@ -134,10 +135,10 @@ and is a key target for lockfile enforcement tests.
 
 ### 9. Mixed: some pinned versions already match, some do not
 
-- `fmt` is already at its pinned version, `catch2` is not.
+- `fmt` is already at its pinned version, `entt` is not.
 - Run `b`.
 - Expect:
-  - Only `catch2` appears in the diagnostic and in `bpkg pkg-build` args.
+  - Only `entt` appears in the diagnostic and in `bpkg pkg-build` args.
   - `fmt` is not mentioned in any `bpkg pkg-build` invocation.
 
 ### 10. Version with bpkg revision suffix (+N)
@@ -204,12 +205,12 @@ and is a key target for lockfile enforcement tests.
 
 ### 18. Lockfile generation captures current configured versions
 
-- Have `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1`, `entt/3.14.0`
+- Have `fmt/10.2.1`, `spdlog/1.14.1+2`, `entt/3.14.0`
   configured in `@<cfg>-external`.
 - Run `b config.lockfile.gen=true lockfile/`.
 - Inspect `lockfile/bdep.lock` (written directly to the source directory).
 - Expect:
-  - Contains `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1`, `entt/3.14.0`.
+  - Contains `fmt/10.2.1`, `spdlog/1.14.1+2`, `entt/3.14.0`.
   - Does not contain project-local packages (`libhello`, `libworld`, etc.).
   - Does not contain host build tools (`xxd`).
 - Commit the generated file and confirm `b` is a fast no-op immediately after.
@@ -247,7 +248,7 @@ config. See overview-plan.md Group E for setup commands.
 
 The same package cannot be present in two linked bdep-managed configs
 simultaneously -- bdep sync will error. Use different packages in each config:
-- `@<cfg>-external` contains fmt, spdlog, catch2 (unchanged from baseline).
+- `@<cfg>-external` contains fmt, spdlog (unchanged from baseline).
 - `@<cfg>-extra` contains entt/3.15.0 (moved here from external for the test).
 
 Setup state before the test:
@@ -255,10 +256,9 @@ Setup state before the test:
 
 Write `bdep.lock`:
 ```
+entt/3.14.0
 fmt/10.1.1
 spdlog/1.14.1+2
-catch2/3.7.1
-entt/3.14.0
 ```
 
 Run `b`.

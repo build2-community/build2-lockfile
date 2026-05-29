@@ -181,7 +181,7 @@ bdep init @"$CONFIG_NAME_EXT" \
   -d lockfile
 ```
 
-This causes bpkg to fetch `fmt`, `spdlog`, `catch2`, `entt` (and `spdlog`'s
+This causes bpkg to fetch `fmt`, `spdlog`, `entt` (and `spdlog`'s
 own `fmt` transitive dep) into `$BUILD_DIR_EXT`. `xxd` (a build-time tool,
 `depends: * xxd`) will be fetched into `$BUILD_DIR_HOST` automatically because
 the host config is linked to the main config -- it does NOT land in the
@@ -214,7 +214,7 @@ bdep sync --upgrade --yes
 ### 4.4 Verify baseline state
 
 ```sh
-bpkg pkg-status --all -d "$BUILD_DIR_EXT"   # fmt, spdlog, catch2, entt -- all "configured"
+bpkg pkg-status --all -d "$BUILD_DIR_EXT"   # fmt, spdlog, entt -- all "configured"
 bpkg pkg-status --all -d "$BUILD_DIR"       # libhello, libworld, etc. -- all "configured"
 bdep status
 ```
@@ -238,7 +238,7 @@ Inspect the result (written directly to the source directory):
 cat lockfile/bdep.lock
 ```
 
-Expected: one `name/version` line each for `fmt`, `spdlog`, `catch2`, `entt`
+Expected: one `name/version` line each for `fmt`, `spdlog`, `entt`
 (and any indirect deps bpkg installed). No project-local packages. No host
 tools (`xxd` is excluded because the generation skips host-type configs).
 Versions match exactly what `bpkg pkg-status` reported in step 4.4.
@@ -345,14 +345,14 @@ b      # expect: "pinning fmt to 10.1.1 in ... (was <current>)"
 bpkg pkg-status fmt -d "$BUILD_DIR_EXT"   # verify 10.1.1
 rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/       # reset
 
-# Case 6: two packages in same config (fmt + catch2)
+# Case 6: two packages in same config (fmt + entt)
 # Edit bdep.lock to pin both to older versions
 rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/       # start clean
 FMTVER=10.1.1
-C2VER=3.5.1+1
-sed -i "s|^fmt/.*|fmt/${FMTVER}|;s|^catch2/.*|catch2/${C2VER}|" lockfile/bdep.lock
+ENTTVER=3.13.2
+sed -i "s|^fmt/.*|fmt/${FMTVER}|;s|^entt/.*|entt/${ENTTVER}|" lockfile/bdep.lock
 b      # expect: single bpkg pkg-build call with both pins
-bpkg pkg-status fmt catch2 -d "$BUILD_DIR_EXT"
+bpkg pkg-status fmt entt -d "$BUILD_DIR_EXT"
 rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 7: transitive interface dep (fmt affects libworld consumers)
@@ -369,10 +369,10 @@ sed -i "s|^fmt/.*|fmt/10.2.1|;s|^spdlog/.*|spdlog/1.14.1+2|" lockfile/bdep.lock
 b      # expect success if compatible; error from bpkg if not
 rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
-# Case 9: partial mismatch (only catch2 differs, fmt already matches)
+# Case 9: partial mismatch (only entt differs, fmt already matches)
 rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
-sed -i 's|^catch2/.*|catch2/3.3.2|' lockfile/bdep.lock
-b      # expect: only catch2 in diagnostic; fmt not mentioned
+sed -i 's|^entt/.*|entt/3.13.2|' lockfile/bdep.lock
+b      # expect: only entt in diagnostic; fmt not mentioned
 rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 10: +N revision suffix exact match
@@ -438,7 +438,7 @@ a second external config must be created for this group.
 
 The same package must not appear in two linked bdep-managed configs at the
 same time -- bdep sync will error. The test uses different packages in each
-config: fmt/spdlog/catch2 stay in external, and entt is moved to extra for
+config: fmt/spdlog stay in external, and entt is moved to extra for
 the duration of this group.
 
 Set up the extra config and move entt to it:
@@ -478,10 +478,9 @@ bdep config add --directory "$PROJECT_DIR" \
 # Cases 21-22: fmt in external (at 10.2.1), entt in extra (at 3.15.0).
 # Pin fmt at 10.1.1 and entt at 3.14.0 to create a mismatch in each config.
 cat > lockfile/bdep.lock << 'EOF'
+entt/3.14.0
 fmt/10.1.1
 spdlog/1.14.1+2
-catch2/3.7.1
-entt/3.14.0
 EOF
 b   # expect: two "pinning" diagnostics (fmt in external, entt in extra),
     # two separate bpkg pkg-build calls, one "synchronizing:" block at end
@@ -588,7 +587,6 @@ b
 bpkg pkg-build --yes \
   fmt/10.2.1 \
   spdlog/1.14.1+2 \
-  catch2/3.7.1 \
   entt/3.14.0 \
   -d "$BUILD_DIR_EXT"
 
