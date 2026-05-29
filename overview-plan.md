@@ -181,9 +181,11 @@ bdep init @"$CONFIG_NAME_EXT" \
   -d lockfile
 ```
 
-This causes bpkg to fetch `fmt`, `spdlog`, `catch2` (and `spdlog`'s own `fmt`
-transitive dep) into `$BUILD_DIR_EXT`. See `add-third-party-deps.md` for the
-full version lists.
+This causes bpkg to fetch `fmt`, `spdlog`, `catch2`, `entt` (and `spdlog`'s
+own `fmt` transitive dep) into `$BUILD_DIR_EXT`. `xxd` (a build-time tool,
+`depends: * xxd`) will be fetched into `$BUILD_DIR_HOST` automatically because
+the host config is linked to the main config -- it does NOT land in the
+external config. See `add-third-party-deps.md` for the full version lists.
 
 ### 4.2 Remove local packages from external (keep only third-party deps)
 
@@ -212,7 +214,7 @@ bdep sync --upgrade --yes
 ### 4.4 Verify baseline state
 
 ```sh
-bpkg pkg-status --all -d "$BUILD_DIR_EXT"   # fmt, spdlog, catch2 -- all "configured"
+bpkg pkg-status --all -d "$BUILD_DIR_EXT"   # fmt, spdlog, catch2, entt -- all "configured"
 bpkg pkg-status --all -d "$BUILD_DIR"       # libhello, libworld, etc. -- all "configured"
 bdep status
 ```
@@ -236,8 +238,9 @@ Inspect the result (written directly to the source directory):
 cat lockfile/bdep.lock
 ```
 
-Expected: one `name/version` line each for `fmt`, `spdlog`, `catch2` (and any
-indirect deps bpkg installed). No project-local packages. No host tools.
+Expected: one `name/version` line each for `fmt`, `spdlog`, `catch2`, `entt`
+(and any indirect deps bpkg installed). No project-local packages. No host
+tools (`xxd` is excluded because the generation skips host-type configs).
 Versions match exactly what `bpkg pkg-status` reported in step 4.4.
 
 ### 5.2 Commit the generated lockfile
@@ -383,33 +386,31 @@ b config.lockfile.gen=true lockfile/
 
 ```sh
 # Case 11: host config skip
-# Add any host tool that is already configured in @host to bdep.lock at a
-# different version. Run b and confirm no bpkg call targets $BUILD_DIR_HOST.
-# NOTE: @host has no packages in the standard setup (host tools are managed
-# by the toolchain, not bpkg). This case cannot be run without a host-type
-# package. Skip if @host reports "no packages in the configuration".
+# xxd is a build-time dep of libhello (depends: * xxd) and lives in @host.
+# Pin it at a nonexistent version -- enforcement must see it and skip @host.
+b config.lockfile.gen=true lockfile/    # generates without xxd (host filtered)
+echo "xxd/1.0.0" >> lockfile/bdep.lock
+b      # expect: NO bpkg pkg-build on @host, xxd stays at 8.2.3075+2
+bpkg pkg-status xxd -d "$BUILD_DIR_HOST"   # verify still 8.2.3075+2
+b config.lockfile.gen=true lockfile/
 
 # Case 14: CRLF line endings
 b config.lockfile.gen=true lockfile/
-printf 'fmt/10.1.1\r\n' > /tmp/crlf-test.lock
-# Replace the fmt line in bdep.lock with the CRLF version
+# Replace the fmt line in bdep.lock with a CRLF-terminated version
 sed -i '/^fmt\//d' lockfile/bdep.lock
 printf 'fmt/10.1.1\r\n' >> lockfile/bdep.lock
 b      # expect: sed strips CR, enforcement runs, fmt corrected
 b config.lockfile.gen=true lockfile/
 
-# Case 19: testing-repo version
-# NOTE: spdlog/1.14.1+2 constrains fmt to ^10.1.1 (compatible, no major bump).
-# The testing-repo fmt versions (11.1.4, 11.0.2) exceed this constraint, so
-# bpkg refuses to install them alongside the current spdlog. To run this case,
-# first upgrade spdlog to a version that accepts fmt ^11, or drop spdlog from
-# the external config, then restore afterwards.
-bpkg pkg-build --yes fmt/11.1.4 -d "$BUILD_DIR_EXT"
-b config.lockfile.gen=true lockfile/
-cat lockfile/bdep.lock   # expect: fmt/11.1.4
-b                        # expect: no-op
-sed -i 's|^fmt/.*|fmt/10.2.1|' lockfile/bdep.lock
-b      # expect: enforcement downgrades fmt back to stable
+# Case 19: testing-repo version (entt 3.14.0 stable -> 3.15.0 testing)
+b config.lockfile.gen=true lockfile/   # expect: entt/3.14.0
+sed -i 's|^entt/.*|entt/3.15.0|' lockfile/bdep.lock
+b      # expect: pinning entt to 3.15.0 (upgrade to testing repo)
+bpkg pkg-status entt -d "$BUILD_DIR_EXT"   # verify 3.15.0
+b config.lockfile.gen=true lockfile/       # expect: entt/3.15.0
+b                                          # expect: no-op
+sed -i 's|^entt/.*|entt/3.14.0|' lockfile/bdep.lock
+b      # expect: enforcement downgrades entt back to stable
 b config.lockfile.gen=true lockfile/
 
 # Case 20: unknown pin (package not in any config)
@@ -431,35 +432,66 @@ b                                            # must be a no-op immediately after
 
 ### Group E: Multi-config (cases 21-22)
 
-NOTE: The lockfile enforcer discovers configurations by matching lines from
-`bdep status` that contain `[cfg-path]` brackets. These are packages from
-LINKED configurations only. Packages installed directly into the main bpkg
-config (`@<cfg>`) do not appear with brackets in `bdep status` output and are
-therefore invisible to the enforcer. Installing a package into `@<cfg>` via
-`bpkg pkg-build -d "$BUILD_DIR"` does not result in a second bpkg-build call.
+The standard three-config topology has only one non-host external config, so
+a second external config must be created for this group.
 
-To exercise the two-config dispatch path you need a second external bpkg
-configuration linked to the project (e.g. `@<cfg>-extra`) that also contains
-a pinned package. Create it with `bpkg cfg-create` + `bpkg cfg-link`, install a
-package there, and then pin it in `bdep.lock`. The standard three-config
-topology cannot demonstrate this path.
-
-These cases require a package to exist in two separate non-host configurations. In the
-standard three-config topology, all third-party deps land in `@<cfg>-external`
-and all project packages in `@<cfg>`. To exercise this path, create a second
-external config linked to the main:
+Set up the extra config once, before the group:
 
 ```sh
-bpkg cfg-create --name "${CONFIG_NAME}-extra" --directory "${BUILD_DIR}-extra" cc
-bpkg rep-add https://pkg.cppget.org/1/stable -d "${BUILD_DIR}-extra"
-bpkg rep-fetch --trust-yes -d "${BUILD_DIR}-extra"
-bpkg cfg-link --directory "$BUILD_DIR" "${BUILD_DIR}-extra" --relative
-bpkg pkg-build --yes catch2/3.5.1+1 -d "${BUILD_DIR}-extra"
-bdep config add --directory "$PROJECT_DIR" @"${CONFIG_NAME}-extra" "${BUILD_DIR}-extra" --no-default --no-forward
+BUILD_DIR_EXTRA="${PROJECT_DIR}/../hello-${CONFIG_NAME}-extra"
+UUID_EXTRA=$(printf '%s' "hello-${CONFIG_NAME}-extra" | md5sum | \
+  awk '{printf "%s-%s-%s-%s-%s", \
+       substr($1,1,8),substr($1,9,4),substr($1,13,4),substr($1,17,4),substr($1,21,12)}')
+
+bpkg cfg-create \
+  --uuid  "$UUID_EXTRA" \
+  --name  "${CONFIG_NAME}-extra" \
+  --directory "$BUILD_DIR_EXTRA" \
+  --wipe cc
+
+bpkg rep-add https://pkg.cppget.org/1/stable https://pkg.cppget.org/1/testing \
+  -d "$BUILD_DIR_EXTRA"
+bpkg rep-fetch --trust-yes -d "$BUILD_DIR_EXTRA"
+b configure: "$BUILD_DIR_EXTRA/"
+
+bpkg cfg-link --directory "$BUILD_DIR" "$BUILD_DIR_EXTRA" --relative
+
+# Install entt in the extra config at a stable version distinct from external.
+# The external config has entt/3.14.0; put a different version here so we can
+# tell which config bdep.lock enforcement targets.
+bpkg pkg-build --yes entt/3.13.2 -d "$BUILD_DIR_EXTRA"
+
+bdep config add --directory "$PROJECT_DIR" \
+  @"${CONFIG_NAME}-extra" "$BUILD_DIR_EXTRA" --no-default --no-forward
 ```
 
-Then pin catch2 in bdep.lock and run `b`. Confirm two `bpkg pkg-build` calls
-(one per config) and exactly one `bdep sync`.
+```sh
+# Cases 21-22: packages in two non-host configs, verify two bpkg-build calls
+# External config has entt/3.14.0, extra config has entt/3.13.2.
+# Pin entt at 3.12.2 -- both configs are mismatched, triggering two calls.
+b config.lockfile.gen=true lockfile/
+# Now bdep.lock includes entt/3.14.0 (from external) but NOT entt/3.13.2
+# (extra config packages don't appear in generation because we only run
+# bpkg pkg-status in configs that contain project-dependent packages).
+# Instead, manually add the extra-config entry for the test:
+echo "entt/3.13.2" >> lockfile/bdep.lock   # extra config version matches
+# Change BOTH to a different pinned version to force two enforcement calls:
+sed -i 's|^entt/.*|entt/3.12.2|' lockfile/bdep.lock
+b      # expect: two "pinning entt" diagnostics, one per config
+       # expect: one bdep sync at the end
+b config.lockfile.gen=true lockfile/   # reset; remove extra-config line manually
+sed -i '/^entt\/3\./{ N; /\nentt\//d }' lockfile/bdep.lock  # dedup if needed
+```
+
+Tear down the extra config after the group:
+
+```sh
+bdep config remove --directory "$PROJECT_DIR" @"${CONFIG_NAME}-extra"
+bpkg cfg-unlink --directory "$BUILD_DIR" --dangling
+rm -rf "$BUILD_DIR_EXTRA"
+b config.lockfile.gen=true lockfile/
+b   # no-op baseline restored
+```
 
 ---
 
@@ -542,6 +574,7 @@ bpkg pkg-build --yes \
   fmt/10.2.1 \
   spdlog/1.14.1+2 \
   catch2/3.7.1 \
+  entt/3.14.0 \
   -d "$BUILD_DIR_EXT"
 
 # 4. Regenerate lockfile to match the freshly installed state

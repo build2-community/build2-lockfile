@@ -1,10 +1,37 @@
 cfg = $path.directory($out_root)
 
 if ($config.lockfile.gen)
-  pins = $process.run_regex(\
+{
+  # Collect unique config paths that have linked packages.
+  linked_cfgs = $sort($process.run_regex(\
     bpkg pkg-status --all --link -d "$cfg", \
-    '^!?([^ !?][^ ]*) \[[^\]]*\] configured !?([^ ]*).*', \
-    '\1/\2')
+    '^!?[^ !?][^ ]* \[([^\]]*)\] configured.*', \
+    '\1'))
+
+  # For each unique linked config, include its packages only when the config
+  # type is not 'host'. Host configs hold build-time tools managed separately
+  # by bdep and must not be pinned in bdep.lock.
+  pins    = [null]
+  prev_cfg = [null]
+  for lcfg: $linked_cfgs
+  {
+    if ($lcfg != $prev_cfg)
+    {
+      prev_cfg = $lcfg
+
+      cfg_type = $process.run_regex(\
+        bpkg cfg-info -d "$lcfg", \
+        '^type: (.+)', \
+        '\1')
+
+      if ($cfg_type != 'host')
+        pins += $process.run_regex(\
+          bpkg pkg-status --all -d "$lcfg", \
+          '^!?([^ !?][^ ]*) configured !?([^ ]*).*', \
+          '\1/\2')
+    }
+  }
+}
 
 file{bdep.lock}@./:
 {{

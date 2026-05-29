@@ -152,12 +152,16 @@ and is a key target for lockfile enforcement tests.
 
 ### 11. Host configuration is skipped
 
-- A host build tool in `@host` at version H1.
-- Pin it at H2 in `bdep.lock`.
+- `xxd` is a build-time dep of `libhello` (`depends: * xxd`) and lives in
+  `@host` at version `8.2.3075+2`. The generation intentionally excludes
+  host-config packages, so `xxd` does NOT appear in `bdep.lock` after
+  `b config.lockfile.gen=true lockfile/`.
+- Manually append `xxd/1.0.0` to `bdep.lock`.
 - Run `b`.
-- Expect: no `bpkg pkg-build` call targets `@host`. Tool remains at H1.
-- Confirm: `bpkg cfg-info -d <host-cfg>` returns `type: host`, which is the
-  skip-branch trigger in `lockfile.build`.
+- Expect: enforcement discovers `xxd` in `@host`, checks `type: host`, and
+  skips it. No `bpkg pkg-build` call targets `@host`. `xxd` remains at
+  `8.2.3075+2`.
+- Confirm: `bpkg pkg-status xxd -d <host-cfg>` still reports `8.2.3075+2`.
 
 ### 12. BDEP_SYNC=false bypasses enforcement
 
@@ -200,23 +204,29 @@ and is a key target for lockfile enforcement tests.
 
 ### 18. Lockfile generation captures current configured versions
 
-- Have `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1` configured in
-  `@<cfg>-external`.
+- Have `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1`, `entt/3.14.0`
+  configured in `@<cfg>-external`.
 - Run `b config.lockfile.gen=true lockfile/`.
 - Inspect `lockfile/bdep.lock` (written directly to the source directory).
 - Expect:
-  - Contains `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1`.
+  - Contains `fmt/10.2.1`, `spdlog/1.14.1+2`, `catch2/3.7.1`, `entt/3.14.0`.
   - Does not contain project-local packages (`libhello`, `libworld`, etc.).
-  - Does not contain host build tools.
+  - Does not contain host build tools (`xxd`).
 - Commit the generated file and confirm `b` is a fast no-op immediately after.
 
 ### 19. Lockfile generation with testing-repo version
 
-- Downgrade or install `fmt` at `11.1.4` (from the testing repo).
-- Run `b config.lockfile.gen=true lockfile/`.
-- Expect: `bdep.lock` contains `fmt/11.1.4`.
-- Run `b` -- no-op.
-- Write `bdep.lock`: `fmt/10.2.1` and run `b` -- enforcement downgrades to stable.
+- `entt` is used for this case because it has `3.14.0` in stable and
+  `3.15.0`/`3.16.0` in testing, with no inter-package constraints.
+- With `entt/3.14.0` in `@<cfg>-external`, run
+  `b config.lockfile.gen=true lockfile/`. Confirm `bdep.lock` contains
+  `entt/3.14.0`.
+- Write `bdep.lock`: `entt/3.15.0` and run `b`. Expect: enforcement upgrades
+  `entt` to the testing-repo version.
+- Run `b config.lockfile.gen=true lockfile/`. Confirm `bdep.lock` now contains
+  `entt/3.15.0`. Run `b` -- no-op.
+- Write `bdep.lock`: `entt/3.14.0` and run `b`. Expect: enforcement downgrades
+  back to stable.
 - This validates that testing-repo versions round-trip correctly through
   the lockfile.
 
@@ -232,17 +242,22 @@ and is a key target for lockfile enforcement tests.
 
 ### 21. Packages spread across two non-host configurations
 
-- If the project topology includes packages in both `@<cfg>` (main) and
-  `@<cfg>-external`, pin one from each.
+Requires a second external configuration (`@<cfg>-extra`) linked to the main
+config. See overview-plan.md Group E for setup commands.
+
+- `@<cfg>-external` contains `entt/3.14.0` (from project deps).
+- `@<cfg>-extra` contains `entt/3.13.2` (manually installed).
+- Write `bdep.lock`: `entt/3.12.2` (version that differs from both configs).
 - Run `b`.
-- Expect: two separate `bpkg pkg-build` calls (one per configuration), then
-  exactly one `bdep sync --yes` at the end.
+- Expect: two `bdep.lock: pinning entt ...` diagnostics and two separate
+  `bpkg pkg-build entt/3.12.2` calls (one per configuration), then exactly
+  one `bdep sync --yes` at the end.
 
 ### 22. bdep sync called exactly once after multi-config changes
 
-- Mismatches in two separate non-host configs (see case 21).
-- Confirm via output that `bdep sync --yes` appears exactly once regardless
-  of how many configs had changes.
+- Same two-config mismatch as case 21.
+- Confirm via full `b` output that `bdep sync --yes` appears exactly once
+  regardless of how many configs had changes.
 
 ---
 

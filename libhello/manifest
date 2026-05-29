@@ -10,5 +10,6 @@ url: https://github.com/build2-community/build2-lockfile
 email: user@email.com
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
+depends: * xxd >= 8.0.0
 depends: fmt >= 10.0.0
 tests: libhello-tests == $

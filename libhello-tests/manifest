@@ -12,3 +12,4 @@ email: user@email.com
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
 depends: catch2 >= 3.3.0
+depends: entt >= 3.14.0

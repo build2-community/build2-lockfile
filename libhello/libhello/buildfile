@@ -2,7 +2,9 @@ intf_libs = # Interface dependencies.
 impl_libs = # Implementation dependencies.
 import intf_libs += fmt%lib{fmt}
 
-lib{hello}: {hxx ixx txx cxx}{** -version} hxx{version} $impl_libs $intf_libs
+import! xxd = xxd%exe{xxd}
+
+lib{hello}: {hxx ixx txx cxx}{** -version} hxx{version} $impl_libs $intf_libs $xxd
 
 hxx{version}: in{version} $src_root/manifest
 
