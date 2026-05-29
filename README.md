@@ -14,7 +14,7 @@ For example:
 git clone .../hello.git
 cd hello
 
-bdep init -C @gcc cc config.cxx=g++
+bdep init -C @msvc cc config.cxx=cl.exe
 bdep update
 bdep test
 ```

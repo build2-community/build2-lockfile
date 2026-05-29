@@ -51,7 +51,7 @@ compiler in use.
 
 ```sh
 PROJECT_DIR=$(pwd)
-CONFIG_NAME=gcc
+CONFIG_NAME=msvc
 CONFIG_NAME_EXT=${CONFIG_NAME}-external
 
 BUILD_DIR_HOST=${PROJECT_DIR}/../hello-host
@@ -156,7 +156,7 @@ Verify:
 bdep config list --directory "$PROJECT_DIR"
 ```
 
-Expected: three rows -- `host` (forward), `gcc-external`, `gcc` (default, forward).
+Expected: three rows -- `host` (forward), `msvc-external`, `msvc` (default, forward).
 
 ---
 
