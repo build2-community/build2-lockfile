@@ -177,8 +177,9 @@ and is a key target for lockfile enforcement tests.
 - Write `bdep.lock` with CRLF line endings (`printf 'fmt/10.2.1\r\n'`).
 - Ensure `fmt` is not at 10.2.1.
 - Run `b`.
-- Expect: `sed -e 's/\r//'` strips the CR, enforcement runs, `fmt` is
-  corrected to 10.2.1.
+- Expect: the build2 built-in `sed` (in-process pseudo-command, ECMAScript
+  regex) strips the `\r` via `s/\r//`, enforcement runs, `fmt` is corrected
+  to 10.2.1.
 
 ### 15. Enforcement skipped during configure meta-operation
 
