@@ -229,7 +229,7 @@ These are the "installed" versions that bdep.lock will be generated from.
 ### 5.1 Generate from current configuration state
 
 ```sh
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 ```
 
 Inspect the result (written directly to the source directory):
@@ -276,7 +276,7 @@ bdep.lock: pinning <name> to <ver> in <cfg-path> (was <old-ver>)
 After every enforcement test, reset to a known state with:
 
 ```sh
-b config.lockfile.gen=true lockfile/   # regenerate to match current installed
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/   # regenerate to match current installed
 b                                       # confirm no-op
 ```
 
@@ -293,12 +293,12 @@ mv lockfile/bdep.lock.bak lockfile/bdep.lock
 # Case 2: empty lockfile
 echo -n "" > lockfile/bdep.lock
 b                                        # expect: silent
-b config.lockfile.gen=true lockfile/     # restore
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/     # restore
 
 # Case 3: comments only
 echo "# no pins" > lockfile/bdep.lock
 b                                        # expect: silent
-b config.lockfile.gen=true lockfile/     # restore
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/     # restore
 
 # Case 4: all versions match (already validated in phase 5.3)
 
@@ -307,31 +307,31 @@ b config.lockfile.gen=true lockfile/     # restore
 ORIG=$(grep '^fmt/' lockfile/bdep.lock)
 sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock   # create mismatch
 BDEP_SYNC=false b                                      # expect: silent, no enforcement
-b config.lockfile.gen=true lockfile/                   # restore
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/                   # restore
 
 # Case 13: BDEP_SYNC=0
 sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock
 BDEP_SYNC=0 b
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 15: configure meta-op
 sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock
 b configure:                                          # expect: no enforcement
 # Note: build2 will also error "dir{} does not support meta-operation configure"
 # -- that is a separate build2 issue, not a lockfile failure.
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 16: disfigure
 sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock
 b disfigure:                                          # expect: no enforcement
 # Note: same "dir{} does not support meta-operation disfigure" error expected.
 b configure: "$BUILD_DIR/"                            # re-configure after disfigure
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 17: info
 sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock
 b info:                                               # expect: no enforcement
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 ```
 
 ### Group B: Version enforcement (cases 5-10)
@@ -343,43 +343,44 @@ Each test changes installed versions. Reset to baseline after each one.
 sed -i 's|^fmt/[^ ]*|fmt/10.1.1|' lockfile/bdep.lock
 b      # expect: "pinning fmt to 10.1.1 in ... (was <current>)"
 bpkg pkg-status fmt -d "$BUILD_DIR_EXT"   # verify 10.1.1
-b config.lockfile.gen=true lockfile/       # reset
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/       # reset
 
 # Case 6: two packages in same config (fmt + catch2)
 # Edit bdep.lock to pin both to older versions
-b config.lockfile.gen=true lockfile/       # start clean
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/       # start clean
 FMTVER=10.1.1
 C2VER=3.5.1+1
 sed -i "s|^fmt/.*|fmt/${FMTVER}|;s|^catch2/.*|catch2/${C2VER}|" lockfile/bdep.lock
 b      # expect: single bpkg pkg-build call with both pins
 bpkg pkg-status fmt catch2 -d "$BUILD_DIR_EXT"
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 7: transitive interface dep (fmt affects libworld consumers)
-sed -i 's|^fmt/.*|fmt/10.0.0|' lockfile/bdep.lock
+# Use 10.1.1 not 10.0.0: spdlog/1.14.1+2 requires fmt ^10.1.1 (>= 10.1.1, < 11).
+sed -i 's|^fmt/.*|fmt/10.1.1|' lockfile/bdep.lock
 b      # expect: fmt pinned, bdep sync re-configures libhello + libworld
 bdep status   # verify project packages in sync
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 8: spdlog/fmt compatibility
 # Pin both. If spdlog's own fmt constraint is satisfied, both install.
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 sed -i "s|^fmt/.*|fmt/10.2.1|;s|^spdlog/.*|spdlog/1.14.1+2|" lockfile/bdep.lock
 b      # expect success if compatible; error from bpkg if not
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 9: partial mismatch (only catch2 differs, fmt already matches)
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 sed -i 's|^catch2/.*|catch2/3.3.2|' lockfile/bdep.lock
 b      # expect: only catch2 in diagnostic; fmt not mentioned
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 10: +N revision suffix exact match
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 # Find the spdlog line and strip the revision suffix, e.g. 1.14.1+2 -> 1.14.1
 sed -i 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' lockfile/bdep.lock
 b      # expect: enforcement fires (1.14.1 != 1.14.1+2)
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 ```
 
 ### Group C: Edge cases (cases 11, 14, 19, 20)
@@ -388,36 +389,36 @@ b config.lockfile.gen=true lockfile/
 # Case 11: host config skip
 # xxd is a build-time dep of libhello (depends: * xxd) and lives in @host.
 # Pin it at a nonexistent version -- enforcement must see it and skip @host.
-b config.lockfile.gen=true lockfile/    # generates without xxd (host filtered)
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/    # generates without xxd (host filtered)
 echo "xxd/1.0.0" >> lockfile/bdep.lock
 b      # expect: NO bpkg pkg-build on @host, xxd stays at 8.2.3075+2
 bpkg pkg-status xxd -d "$BUILD_DIR_HOST"   # verify still 8.2.3075+2
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 14: CRLF line endings
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 # Replace the fmt line in bdep.lock with a CRLF-terminated version
 sed -i '/^fmt\//d' lockfile/bdep.lock
 printf 'fmt/10.1.1\r\n' >> lockfile/bdep.lock
 b      # expect: sed strips CR, enforcement runs, fmt corrected
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 19: testing-repo version (entt 3.14.0 stable -> 3.15.0 testing)
-b config.lockfile.gen=true lockfile/   # expect: entt/3.14.0
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/   # expect: entt/3.14.0
 sed -i 's|^entt/.*|entt/3.15.0|' lockfile/bdep.lock
 b      # expect: pinning entt to 3.15.0 (upgrade to testing repo)
 bpkg pkg-status entt -d "$BUILD_DIR_EXT"   # verify 3.15.0
-b config.lockfile.gen=true lockfile/       # expect: entt/3.15.0
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/       # expect: entt/3.15.0
 b                                          # expect: no-op
 sed -i 's|^entt/.*|entt/3.14.0|' lockfile/bdep.lock
 b      # expect: enforcement downgrades entt back to stable
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # Case 20: unknown pin (package not in any config)
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 echo "libnothere/1.0.0" >> lockfile/bdep.lock
 b      # expect: silent (no match in bdep status, silently skipped)
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 ```
 
 ### Group D: Lockfile generation (cases 18)
@@ -425,7 +426,7 @@ b config.lockfile.gen=true lockfile/
 ```sh
 # Case 18: generation captures correct state
 bpkg pkg-status --all -d "$BUILD_DIR_EXT"   # note current versions
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 cat lockfile/bdep.lock                       # compare to noted versions
 b                                            # must be a no-op immediately after
 ```
@@ -484,7 +485,7 @@ entt/3.14.0
 EOF
 b   # expect: two "pinning" diagnostics (fmt in external, entt in extra),
     # two separate bpkg pkg-build calls, one "synchronizing:" block at end
-b config.lockfile.gen=true lockfile/   # regenerate to match current installed
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/   # regenerate to match current installed
 b   # no-op
 ```
 
@@ -503,7 +504,7 @@ bdep config remove --directory "$PROJECT_DIR" @"${CONFIG_NAME}-extra"
 bpkg cfg-unlink --uuid "$UUID_EXTRA" --directory "$BUILD_DIR"
 rm -rf "$BUILD_DIR_EXTRA"
 
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 b   # no-op baseline restored
 ```
 
@@ -563,7 +564,7 @@ compiled code.
 After all individual test cases pass, do a complete clean sweep:
 
 ```sh
-b config.lockfile.gen=true lockfile/   # regenerate to known state
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/   # regenerate to known state
 b                                       # no-op baseline
 # then re-run Groups A through D in sequence
 ```
@@ -577,7 +578,7 @@ or after a botched test.
 
 ```sh
 # 1. Regenerate bdep.lock from actual installed state
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 
 # 2. Confirm no-op
 b
@@ -592,7 +593,7 @@ bpkg pkg-build --yes \
   -d "$BUILD_DIR_EXT"
 
 # 4. Regenerate lockfile to match the freshly installed state
-b config.lockfile.gen=true lockfile/
+rm -f lockfile/bdep.lock && b config.lockfile.gen=true lockfile/
 b
 ```
 
