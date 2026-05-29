@@ -1,0 +1,11 @@
+: 1
+location: libhello/
+
+:
+location: libworld/
+
+:
+location: libhello-tests/
+
+:
+location: libworld-tests/

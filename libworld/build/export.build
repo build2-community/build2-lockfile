@@ -1,0 +1,6 @@
+$out_root/
+{
+  include libworld/
+}
+
+export $out_root/libworld/$import.target

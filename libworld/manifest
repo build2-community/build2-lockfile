@@ -1,0 +1,13 @@
+: 1
+name: libworld
+version: 0.1.0-a.0.z
+language: c++
+project: hello
+summary: world C++ library
+license: MIT
+description-file: README.md
+url: https://github.com/build2-community/build2-lockfile
+email: user@email.com
+depends: * build2 >= 0.18.0
+depends: * bpkg >= 0.18.0
+#depends: libhello ^1.0.0
