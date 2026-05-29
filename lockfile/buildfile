@@ -6,8 +6,6 @@ if ($config.lockfile.gen)
     '^([^!? ][^ ]*) \[[^\]]*\] configured !?([^ ]*).*', \
     '\1/\2')
 
-# backlink = true creates a symlink $src_root/bdep.lock -> $out_root/bdep.lock.
-#
 file{bdep.lock}@./:
 {{
   depdb hash $pins
@@ -23,8 +21,7 @@ file{bdep.lock}@./:
 
 ./: file{bdep.lock}:
 {
-  include  = $config.lockfile.gen
-  backlink = true
+  include = $config.lockfile.gen
 }
 
 ./: {*/ -build/} doc{README.md} manifest
