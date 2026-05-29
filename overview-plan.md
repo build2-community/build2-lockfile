@@ -62,9 +62,6 @@ BUILD_DIR_EXT=${PROJECT_DIR}/../hello-${CONFIG_NAME_EXT}
 UUID_HOST=$(printf '%s' "hello-host"                | md5sum | awk '{printf "%s-%s-%s-%s-%s", substr($1,1,8),substr($1,9,4),substr($1,13,4),substr($1,17,4),substr($1,21,12)}')
 UUID_MAIN=$(printf '%s' "hello-${CONFIG_NAME}"      | md5sum | awk '{printf "%s-%s-%s-%s-%s", substr($1,1,8),substr($1,9,4),substr($1,13,4),substr($1,17,4),substr($1,21,12)}')
 UUID_EXT=$(printf '%s'  "hello-${CONFIG_NAME_EXT}"  | md5sum | awk '{printf "%s-%s-%s-%s-%s", substr($1,1,8),substr($1,9,4),substr($1,13,4),substr($1,17,4),substr($1,21,12)}')
-
-CONFIG="cxx.id=${CONFIG_NAME}"          # adjust for your compiler
-CONFIG_EXT="config.warnings=false"
 ```
 
 ---
@@ -135,11 +132,14 @@ bpkg cfg-link --directory "$BUILD_DIR" "$BUILD_DIR_EXT" --relative
 ```sh
 b configure: "$BUILD_DIR_HOST/" config.config.load=~host
 
-b configure: "$BUILD_DIR/"     "config.config.load='$CONFIG'"
+b configure: "$BUILD_DIR/"
 
-b configure: "$BUILD_DIR_EXT/" "config.config.load='$CONFIG'"
-b configure: "$BUILD_DIR_EXT/" "config.config.load='$CONFIG_EXT'"
+b configure: "$BUILD_DIR_EXT/"
 ```
+
+Note: `config.config.load` only accepts file paths or the special `~host`
+value. Compiler settings (MSVC on Windows) are auto-detected and require no
+extra flags.
 
 ### 3.8 Register configurations with the project
 

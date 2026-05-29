@@ -94,18 +94,15 @@ bpkg cfg-link --directory "$BUILD_DIR" "$BUILD_DIR_EXT" --relative
 ```sh
 b configure: "$BUILD_DIR_HOST/" config.config.load=~host
 
-b configure: "$BUILD_DIR/" \
-    "config.config.load='$CONFIG'" \
-    [config.cxx.std=$CXX_STD]        \   # optional
-    [$EXTRA_CONFIGS]                      # optional
+b configure: "$BUILD_DIR/"
 
-b configure: "$BUILD_DIR_EXT/" "config.config.load='$CONFIG'"
-b configure: "$BUILD_DIR_EXT/" "config.config.load='$CONFIG_EXT'"
+b configure: "$BUILD_DIR_EXT/"
 ```
 
-The external configuration gets two `b configure:` passes: one with the same
-base config as main, and a second with the external-specific overrides (which
-typically disable warnings).
+`config.config.load` only accepts file paths or the special `~host` value.
+Compiler settings (MSVC on Windows) are auto-detected and require no extra
+flags. Any additional configuration variables (e.g. `config.cxx.std=17`) can
+be appended directly to the relevant `b configure:` invocation.
 
 ---
 
