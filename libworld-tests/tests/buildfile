@@ -1,5 +1,5 @@
 libs =
-#import libs += libhello%lib{hello}
+import libs += libworld%lib{world}
 
 exe{libworld-tests}: {hxx ixx txx cxx}{**} $libs testscript
 
