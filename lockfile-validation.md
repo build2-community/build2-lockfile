@@ -245,19 +245,36 @@ and is a key target for lockfile enforcement tests.
 Requires a second external configuration (`@<cfg>-extra`) linked to the main
 config. See overview-plan.md Group E for setup commands.
 
-- `@<cfg>-external` contains `entt/3.14.0` (from project deps).
-- `@<cfg>-extra` contains `entt/3.13.2` (manually installed).
-- Write `bdep.lock`: `entt/3.12.2` (version that differs from both configs).
-- Run `b`.
-- Expect: two `bdep.lock: pinning entt ...` diagnostics and two separate
-  `bpkg pkg-build entt/3.12.2` calls (one per configuration), then exactly
-  one `bdep sync --yes` at the end.
+The same package cannot be present in two linked bdep-managed configs
+simultaneously -- bdep sync will error. Use different packages in each config:
+- `@<cfg>-external` contains fmt, spdlog, catch2 (unchanged from baseline).
+- `@<cfg>-extra` contains entt/3.15.0 (moved here from external for the test).
+
+Setup state before the test:
+- entt/3.15.0 in extra, fmt/10.2.1 in external (both differ from the pins).
+
+Write `bdep.lock`:
+```
+fmt/10.1.1
+spdlog/1.14.1+2
+catch2/3.7.1
+entt/3.14.0
+```
+
+Run `b`.
+
+Expect:
+- Diagnostic: `bdep.lock: pinning fmt to 10.1.1 in <ext-cfg-path> (was 10.2.1)`
+- Diagnostic: `bdep.lock: pinning entt to 3.14.0 in <extra-cfg-path> (was 3.15.0)`
+- `bpkg pkg-build --yes --no-move fmt/10.1.1 -d <ext-cfg>` executed.
+- `bpkg pkg-build --yes --no-move entt/3.14.0 -d <extra-cfg>` executed.
+- Exactly one `bdep sync --yes` at the end.
 
 ### 22. bdep sync called exactly once after multi-config changes
 
 - Same two-config mismatch as case 21.
-- Confirm via full `b` output that `bdep sync --yes` appears exactly once
-  regardless of how many configs had changes.
+- Confirm via full `b` output that the "synchronizing:" block appears exactly
+  once regardless of how many configs had changes.
 
 ---
 

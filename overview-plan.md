@@ -435,7 +435,12 @@ b                                            # must be a no-op immediately after
 The standard three-config topology has only one non-host external config, so
 a second external config must be created for this group.
 
-Set up the extra config once, before the group:
+The same package must not appear in two linked bdep-managed configs at the
+same time -- bdep sync will error. The test uses different packages in each
+config: fmt/spdlog/catch2 stay in external, and entt is moved to extra for
+the duration of this group.
+
+Set up the extra config and move entt to it:
 
 ```sh
 BUILD_DIR_EXTRA="${PROJECT_DIR}/../hello-${CONFIG_NAME}-extra"
@@ -456,39 +461,48 @@ b configure: "$BUILD_DIR_EXTRA/"
 
 bpkg cfg-link --directory "$BUILD_DIR" "$BUILD_DIR_EXTRA" --relative
 
-# Install entt in the extra config at a stable version distinct from external.
-# The external config has entt/3.14.0; put a different version here so we can
-# tell which config bdep.lock enforcement targets.
-bpkg pkg-build --yes entt/3.13.2 -d "$BUILD_DIR_EXTRA"
+# Install entt/3.15.0 in extra (will be the "installed" version for the test).
+bpkg pkg-build --yes entt/3.15.0 -d "$BUILD_DIR_EXTRA"
+
+# Drop entt from external (libhello-tests is a cross-config dependent -- bpkg
+# will disfigure it automatically). Then bdep sync picks entt from extra.
+bpkg pkg-drop --yes --drop-dependent entt -d "$BUILD_DIR_EXT"
+bdep sync --yes -d "$PROJECT_DIR"
 
 bdep config add --directory "$PROJECT_DIR" \
   @"${CONFIG_NAME}-extra" "$BUILD_DIR_EXTRA" --no-default --no-forward
 ```
 
 ```sh
-# Cases 21-22: packages in two non-host configs, verify two bpkg-build calls
-# External config has entt/3.14.0, extra config has entt/3.13.2.
-# Pin entt at 3.12.2 -- both configs are mismatched, triggering two calls.
-b config.lockfile.gen=true lockfile/
-# Now bdep.lock includes entt/3.14.0 (from external) but NOT entt/3.13.2
-# (extra config packages don't appear in generation because we only run
-# bpkg pkg-status in configs that contain project-dependent packages).
-# Instead, manually add the extra-config entry for the test:
-echo "entt/3.13.2" >> lockfile/bdep.lock   # extra config version matches
-# Change BOTH to a different pinned version to force two enforcement calls:
-sed -i 's|^entt/.*|entt/3.12.2|' lockfile/bdep.lock
-b      # expect: two "pinning entt" diagnostics, one per config
-       # expect: one bdep sync at the end
-b config.lockfile.gen=true lockfile/   # reset; remove extra-config line manually
-sed -i '/^entt\/3\./{ N; /\nentt\//d }' lockfile/bdep.lock  # dedup if needed
+# Cases 21-22: fmt in external (at 10.2.1), entt in extra (at 3.15.0).
+# Pin fmt at 10.1.1 and entt at 3.14.0 to create a mismatch in each config.
+cat > lockfile/bdep.lock << 'EOF'
+fmt/10.1.1
+spdlog/1.14.1+2
+catch2/3.7.1
+entt/3.14.0
+EOF
+b   # expect: two "pinning" diagnostics (fmt in external, entt in extra),
+    # two separate bpkg pkg-build calls, one "synchronizing:" block at end
+b config.lockfile.gen=true lockfile/   # regenerate to match current installed
+b   # no-op
 ```
 
 Tear down the extra config after the group:
 
 ```sh
+# Re-install entt/3.14.0 in external before removing extra.
+bpkg pkg-build --yes entt/3.14.0 -d "$BUILD_DIR_EXT"
+# Drop entt from extra (cross-config dependent drop, then bdep sync re-links).
+bpkg pkg-drop --yes --drop-dependent entt -d "$BUILD_DIR_EXTRA"
+bdep sync --yes -d "$PROJECT_DIR"
+
+# Unlink and remove the extra config (unlink before deleting the directory,
+# otherwise bpkg cfg-unlink cannot find the configuration to remove).
 bdep config remove --directory "$PROJECT_DIR" @"${CONFIG_NAME}-extra"
-bpkg cfg-unlink --directory "$BUILD_DIR" --dangling
+bpkg cfg-unlink --uuid "$UUID_EXTRA" --directory "$BUILD_DIR"
 rm -rf "$BUILD_DIR_EXTRA"
+
 b config.lockfile.gen=true lockfile/
 b   # no-op baseline restored
 ```
