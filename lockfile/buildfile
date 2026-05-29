@@ -31,6 +31,8 @@ if ($config.lockfile.gen)
           '\1/\2')
     }
   }
+
+  pins = $sort($pins)
 }
 
 file{bdep.lock}@./:
