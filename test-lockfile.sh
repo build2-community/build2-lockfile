@@ -442,13 +442,19 @@ EOF
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || rc=1
   assert_contains "$out" 'pinning entt to 3\.14\.0' || rc=1
 
-  # Exactly one bdep sync invocation.
+  # bdep sync must fire at most once across all config changes.
+  # (It may produce no "synchronizing:" output when packages are already in
+  # sync after the bpkg builds, so only check it did not fire more than once.)
   local sync_count
   sync_count=$(printf '%s' "$out" | grep -c 'synchronizing' || true)
-  if [ "$sync_count" -ne 1 ]; then
-    printf 'expected 1 synchronizing block, got %s\n' "$sync_count"
+  if [ "$sync_count" -gt 1 ]; then
+    printf 'bdep sync fired %s times (expected at most 1)\n' "$sync_count"
     rc=1
   fi
+
+  # Verify the final installed versions in each config.
+  assert_version fmt  '10.1.1' "$BUILD_DIR_EXT"   || rc=1
+  assert_version entt '3.14.0' "$BUILD_DIR_EXTRA"  || rc=1
 
   _teardown_extra_config
   return $rc
