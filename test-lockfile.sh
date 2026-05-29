@@ -86,7 +86,7 @@ reset_installed() {
 
 reset_lockfile() {
   rm -f "$LOCKFILE"
-  _run b config.lockfile.gen=true lockfile/
+  b -q config.lockfile.gen=true lockfile/ >/dev/null 2>&1
 }
 
 reset_baseline() {
@@ -202,25 +202,24 @@ t_case13_bdep_sync_zero() {
 t_case15_configure_skip() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out rc=0
-  out=$(_capture b configure:) || true
+  out=$(_capture b configure: lockfile/) || true
   assert_not_contains "$out" 'pinning' || rc=1
-  _run b configure: "$BUILD_DIR/" || true
   return $rc
 }
 
 t_case16_disfigure_skip() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out rc=0
-  out=$(_capture b disfigure:) || true
+  out=$(_capture b disfigure: lockfile/) || true
   assert_not_contains "$out" 'pinning' || rc=1
-  _run b configure: "$BUILD_DIR/" || true
+  b configure: "$BUILD_DIR/" >/dev/null 2>&1 || true
   return $rc
 }
 
 t_case17_info_skip() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(_capture b info:) || true
+  out=$(_capture b info: lockfile/) || true
   assert_not_contains "$out" 'pinning'
 }
 
