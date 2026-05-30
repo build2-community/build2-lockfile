@@ -274,6 +274,15 @@ t_case17_info_skip() {
 # --------------------------------------------------------------------------
 # Group B: Version enforcement (cases 5-10)
 # --------------------------------------------------------------------------
+# Dependency topology driving package choices in this group:
+#   fmt   -- interface dep of libhello, exported transitively to libworld and
+#             both test packages. Pinning it exercises bdep sync re-configuring
+#             the full dependent chain. spdlog also depends on fmt internally,
+#             so both land in BUILD_DIR_EXT.
+#   entt  -- header-only with no cross-package constraints, and has both
+#             stable (3.13.x, 3.14.0) and testing-repo (3.15.0+) versions,
+#             which makes it ideal for pin-cycling and version round-trips.
+#   xxd   -- host build tool (lives in BUILD_DIR_HOST), exercises case 11.
 
 t_case5_single_mismatch() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
@@ -529,6 +538,11 @@ t_case18_generation_captures_state() {
 # --------------------------------------------------------------------------
 # Group E: Multi-config (cases 21-22)
 # --------------------------------------------------------------------------
+# bdep disallows the same package from appearing in two linked bdep-managed
+# configurations simultaneously -- bdep sync errors. To test per-config
+# dispatch, packages must be spread across distinct configs. fmt/spdlog stay
+# in BUILD_DIR_EXT; entt is moved to a new BUILD_DIR_EXTRA config for the
+# duration of this group.
 
 _setup_extra_config() {
   _run bpkg cfg-create \
