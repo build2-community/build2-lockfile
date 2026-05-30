@@ -2,6 +2,22 @@ cfg = $path.directory($out_root)
 
 if ($config.lockfile.gen)
 {
+  # Resolve the amalgamation root dynamically rather than assuming $src_root/..
+  # so the lockfile package works correctly at any nesting depth.
+  amg_rel  = $process.run_regex(\
+    b "info:" "$src_root/", \
+    '^amalgamation: (.+)', \
+    '\1')
+  amg_root = $path.normalize($src_root/$amg_rel)
+
+  # Collect project package names so they can be excluded from pins.
+  # In a complex config topology a linked non-host config may contain project
+  # packages (e.g. a staging or integration config); they must not be pinned.
+  prj_names = $process.run_regex(\
+    bdep status -d "$amg_root", \
+    '^([^ ]+) .*', \
+    '\1')
+
   # Collect unique config paths that have linked packages.
   linked_cfgs = $sort($process.run_regex(\
     bpkg pkg-status --all --link -d "$cfg", \
@@ -9,9 +25,9 @@ if ($config.lockfile.gen)
     '\1'))
 
   # For each unique linked config, include its packages only when the config
-  # type is not 'host'. Host configs hold build-time tools managed separately
-  # by bdep and must not be pinned in bdep.lock.
-  pins    = [null]
+  # type is not 'host' and the package is not a project-local package.
+  # Host configs hold build-time tools managed separately by bdep.
+  pins     = [null]
   prev_cfg = [null]
   for lcfg: $linked_cfgs
   {
@@ -25,10 +41,26 @@ if ($config.lockfile.gen)
         '\1')
 
       if ($cfg_type != 'host')
-        pins += $process.run_regex(\
+      {
+        for pv: $process.run_regex(\
           bpkg pkg-status --all -d "$lcfg", \
           '^!?([^ !?][^ ]*) configured !?([^ ]*).*', \
           '\1/\2')
+        {
+          pname  = $regex.replace($pv, '^([^/]+)/.*', '\1')
+          in_prj = false
+          for n: $prj_names
+          {
+            if ($n == $pname)
+            {
+              in_prj = true
+              break
+            }
+          }
+          if (!$in_prj)
+            pins += $pv
+        }
+      }
     }
   }
 

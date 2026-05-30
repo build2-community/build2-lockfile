@@ -32,6 +32,14 @@ if ($build.mode         != 'skeleton'    && \
       $getenv('BDEP_SYNC') == true   || \
       $getenv('BDEP_SYNC') == 1)
   {
+    # Resolve the amalgamation root dynamically rather than assuming $src_root/..
+    # so the lockfile package works correctly at any nesting depth.
+    amg_rel  = $process.run_regex(\
+      b "info:" "$src_root/", \
+      '^amalgamation: (.+)', \
+      '\1')
+    amg_root = $path.normalize($src_root/$amg_rel)
+
     lockfile = [string] $src_root/bdep.lock
     if ($filesystem.file_exists($lockfile))
     {
@@ -53,12 +61,37 @@ if ($build.mode         != 'skeleton'    && \
         for pin: $allpins
           allnames += $regex.replace($pin, '^([^/]+)/.*', '\1')
 
+        # Filter out project-local packages before the bdep status call.
+        # bdep status errors if the same call includes both an initialized
+        # project package (pkg-spec) and an external dep (dep-spec): e.g.
+        # "bdep status dep1 libhello" fails with "initialized package
+        # libhello specified with dependency package dep1".
+        prj_names = $process.run_regex(\
+          bdep status -d "$amg_root", \
+          '^([^ ]+) .*', \
+          '\1')
+        dep_names = [null]
+        for n: $allnames
+        {
+          in_prj = false
+          for pn: $prj_names
+          {
+            if ($pn == $n)
+            {
+              in_prj = true
+              break
+            }
+          }
+          if (!$in_prj)
+            dep_names += $n
+        }
+
         # Discover which configuration each pinned package lives in.
         # bdep status reports packages from linked configurations with the
         # configuration path in square brackets after the package name.
         # Sort results so identical paths are adjacent for dedup below.
         linked_cfgs = $sort($process.run_regex(\
-          bdep status -d "$src_root/.." $allnames, \
+          bdep status -d "$amg_root" $dep_names, \
           '^[^ ]+ \[([^\]]*)\] configured.*', \
           '\1'))
 
@@ -142,7 +175,7 @@ if ($build.mode         != 'skeleton'    && \
         # After any version changes, re-configure the project packages that
         # were affected by the version changes above.
         if ($changed)
-          ignored = $process.run(bdep sync --yes -d "$src_root/..")
+          ignored = $process.run(bdep sync --yes -d "$amg_root")
       }
     }
   }

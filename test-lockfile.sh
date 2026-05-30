@@ -356,6 +356,25 @@ t_case20_unknown_pin() {
   assert_not_contains "$out" 'pinning libnothere'
 }
 
+t_case23_project_package_pin_ignored() {
+  # If a bdep.lock entry names an initialized project package (e.g. because
+  # the lockfile package is embedded in a larger amalgamation where a project
+  # package shares a name with something in bdep.lock), bdep status would
+  # error if all names were passed in one call: "initialized package X
+  # specified with dependency package Y".  The per-name query in
+  # lockfile.build avoids this: the project package produces no [cfg-path]
+  # line, so it is silently skipped while real deps are still enforced.
+  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  # 'lockfile' is an initialized project package in this amalgamation.
+  printf 'lockfile/1.0.0\n' >> "$LOCKFILE"
+  local out rc=0
+  out=$(_capture b) || { rc=$?; }
+  assert_not_contains "$out" 'error:' || rc=1
+  assert_contains "$out" 'pinning fmt to 10\.1\.1' || rc=1
+  assert_not_contains "$out" 'pinning lockfile' || rc=1
+  return $rc
+}
+
 # --------------------------------------------------------------------------
 # Group D: Lockfile generation (case 18)
 # --------------------------------------------------------------------------
@@ -491,6 +510,7 @@ run_test "Case 17: info meta-operation skips enforcement"        t_case17_info_s
 run_test "Case 18: generation captures current versions"         t_case18_generation_captures_state
 run_test "Case 19: testing-repo version round-trips correctly"   t_case19_testing_repo_version
 run_test "Case 20: unknown pin silently skipped"                 t_case20_unknown_pin
+run_test "Case 23: project package name in bdep.lock skipped"    t_case23_project_package_pin_ignored
 run_test "Cases 21-22: packages spread across two non-host configs" t_cases21_22_multi_config
 
 echo ""
