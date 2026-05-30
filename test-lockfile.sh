@@ -446,6 +446,42 @@ t_case24_pkg_build_no_repo_in_ext_cfg() {
   return $rc
 }
 
+# --------------------------------------------------------------------------
+# Group F: --config-uuid probe (case 25)
+# --------------------------------------------------------------------------
+
+t_case25_config_uuid_target_has_repos() {
+  # Probe: does 'bpkg pkg-build { --config-uuid=<ext> }+ pkg/ver -d bpkg_cfg'
+  # succeed when the target config has remote repos? If yes, the repo-borrowing
+  # fallback in lockfile.build can be replaced with a single --config-uuid call.
+  local legacy_url='https://pkg.cppget.org/1/legacy'
+  local ext_uuid
+  ext_uuid=$(bpkg cfg-info -d "$BUILD_DIR_EXT" | awk '/^uuid:/{print $2}')
+
+  # Add legacy repo to ext so fmt/10.1.1 is resolvable from ext's own repos.
+  _run bpkg rep-add  "$legacy_url" -d "$BUILD_DIR_EXT"
+  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR_EXT"
+
+  local out rc=0
+  out=$(_capture bpkg pkg-build --yes --no-move \
+    '{' "--config-uuid=$ext_uuid" '}+' \
+    "fmt/10.1.1" \
+    -d "$BUILD_DIR") || rc=$?
+
+  if [ "$rc" -ne 0 ]; then
+    printf '--config-uuid with target having repos FAILED (rc=%s)\n' "$rc"
+    printf '%s\n' "$out"
+  else
+    assert_version fmt '10.1.1' "$BUILD_DIR_EXT" || rc=1
+  fi
+
+  # Restore fmt and remove the borrowed legacy repo regardless of outcome.
+  _run bpkg pkg-build --yes "fmt/${FMT_BASE}" -d "$BUILD_DIR_EXT"
+  _run bpkg rep-remove "$legacy_url" -d "$BUILD_DIR_EXT"
+
+  return $rc
+}
+
 t_case23_project_package_pin_ignored() {
   # If a bdep.lock entry names an initialized project package (e.g. because
   # the lockfile package is embedded in a larger amalgamation where a project
@@ -602,6 +638,7 @@ run_test "Case 19: testing-repo version round-trips correctly"   t_case19_testin
 run_test "Case 20: unknown pin silently skipped"                 t_case20_unknown_pin
 run_test "Case 23: project package name in bdep.lock skipped"    t_case23_project_package_pin_ignored
 run_test "Case 24: enforcement works when ext cfg has no repos"  t_case24_pkg_build_no_repo_in_ext_cfg
+run_test "Case 25: --config-uuid works when target cfg has repos" t_case25_config_uuid_target_has_repos
 run_test "Cases 21-22: packages spread across two non-host configs" t_cases21_22_multi_config
 
 echo ""

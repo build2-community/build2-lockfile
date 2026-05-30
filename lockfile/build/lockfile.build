@@ -8,21 +8,21 @@
 # Packages are discovered per-configuration via bdep status. For each non-host
 # configuration that contains packages with version mismatches, bpkg pkg-build
 # is run to apply the required version. The source configuration for pkg-build
-# is chosen topology-agnostically: the configuration that holds the package is
-# preferred; if it has no remote (pkg:/git:) repositories registered, the first
-# other linked configuration that does is used instead. --no-move keeps every
-# package in its current configuration regardless of which source is used.
-# When a fallback source is needed, the source config's remote repositories are
-# temporarily added to the package's own config so pkg-build can resolve the
+# defaults to the configuration that holds the package. If that configuration
+# has no remote (pkg:/git:) repositories registered, the bpkg configuration
+# that builds the lockfile package (bpkg_cfg, derived from $out_root) is used
+# as fallback. --no-move keeps every package in its current configuration
+# regardless of which source is used.
+# When a fallback source is needed, its remote repositories are temporarily
+# added to the package's own config so pkg-build can resolve the pinned
 # version, then removed immediately after. This avoids db-identity issues and
 # lets bpkg find the package in the correct configuration.
 # After any version change, bdep sync re-configures the project packages that
 # were affected.
 #
-# The solution is topology-agnostic: it works with any number of linked
-# configurations in any arrangement. The only configuration type handled
-# explicitly is 'host', which is skipped because host configurations contain
-# build-time tools managed separately by bdep.
+# The only configuration type handled explicitly is 'host', which is skipped
+# because host configurations contain build-time tools managed separately by
+# bdep.
 #
 # To disable enforcement for one build:
 #
@@ -45,6 +45,15 @@ if ($build.mode         != 'skeleton'    && \
       '^amalgamation: (.+)', \
       '\1')
     amg_root = $path.normalize($src_root/$amg_rel)
+
+    # Derive the bpkg configuration root from $out_root using the same
+    # amalgamation-relative path. This is the config where the lockfile
+    # package itself is built and is the natural fallback source for pkg-build
+    # when the target config has no remote repos.
+    if ($null($amg_rel))
+      bpkg_cfg = $out_root
+    else
+      bpkg_cfg = $path.normalize($out_root/$amg_rel)
 
     lockfile = [string] $src_root/bdep.lock
     if ($filesystem.file_exists($lockfile))
@@ -101,27 +110,6 @@ if ($build.mode         != 'skeleton'    && \
           '^[^ ]+ \[([^\]]*)\] configured.*', \
           '\1'))
 
-        # Collect all project configurations (absolute paths) as source
-        # candidates for pkg-build.  bdep config list includes every
-        # configuration associated with the project, not only those that hold
-        # external dep packages.  A config that holds no dep packages may still
-        # carry remote repos set up from repositories.manifest by bdep init and
-        # can serve as the source when the package's own config has no repos.
-        # bdep config list output: "@name <abs-path> <id> <type> <flags>"
-        # bdep config list output on Windows uses backslash path separators.
-        # [^ ]+ inside a capturing group followed by further pattern content
-        # does not match these paths reliably, so capture the entire "path rest"
-        # suffix and then extract the path with regex.replace in a loop.
-        cfgs_raw = $process.run_regex(\
-          bdep config list -d "$amg_root", \
-          '^@[^ ]+ (.+)', \
-          '\1')
-        all_cfgs = [null]
-        for cfg_raw: $cfgs_raw
-          all_cfgs += $path.normalize($regex.replace($cfg_raw, \
-            '^([^ ]+) .*', '\1'))
-        all_cfgs = $sort($all_cfgs)
-
         # For each non-host config that has mismatched packages, collect the
         # pending pins and apply them via the best available source config.
         ran_pkg_build = false
@@ -177,10 +165,10 @@ if ($build.mode         != 'skeleton'    && \
               if (!$null($pending_pins))
               {
                 # Find a source configuration to run pkg-build from.
-                # Prefer lcfg itself; fall back to any other project config
-                # that has remote (pkg:/git:) repos.
-                # The pattern must consume the entire line (process.run_regex
-                # uses full-line matching); hence the trailing .* .
+                # Prefer lcfg itself; fall back to bpkg_cfg (the config that
+                # builds the lockfile package). The trailing .* ensures the
+                # pattern consumes the entire line as required by
+                # process.run_regex's full-line matching.
                 source_cfg = [null]
                 use_fallback = false
                 has_remote = $process.run_regex(\
@@ -191,18 +179,14 @@ if ($build.mode         != 'skeleton'    && \
                   source_cfg = $lcfg
                 else
                 {
-                  for scfg: $all_cfgs
+                  has_remote = $process.run_regex(\
+                    bpkg rep-list -d "$bpkg_cfg", \
+                    '^(pkg|git):.*', \
+                    '\1')
+                  if (!$empty($has_remote))
                   {
-                    has_remote = $process.run_regex(\
-                      bpkg rep-list -d "$scfg", \
-                      '^(pkg|git):.*', \
-                      '\1')
-                    if (!$empty($has_remote))
-                    {
-                      source_cfg = $scfg
-                      use_fallback = true
-                      break
-                    }
+                    source_cfg = $bpkg_cfg
+                    use_fallback = true
                   }
                 }
                 if ($null($source_cfg))
