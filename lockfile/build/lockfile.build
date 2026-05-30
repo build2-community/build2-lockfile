@@ -7,11 +7,17 @@
 #
 # Packages are discovered per-configuration via bdep status. For each non-host
 # configuration that contains packages with version mismatches, bpkg pkg-build
-# is run directly on that configuration. This keeps all packages in the
-# configuration they already belong to and lets bpkg handle the full dependency
-# graph within that configuration (including any same-configuration dependents
-# that need to be reconfigured). After any version change, bdep sync
-# re-configures the project packages that were affected.
+# is run to apply the required version. The source configuration for pkg-build
+# is chosen topology-agnostically: the configuration that holds the package is
+# preferred; if it has no remote (pkg:/git:) repositories registered, the first
+# other linked configuration that does is used instead. --no-move keeps every
+# package in its current configuration regardless of which source is used.
+# When a fallback source is needed, the source config's remote repositories are
+# temporarily added to the package's own config so pkg-build can resolve the
+# version, then removed immediately after. This avoids db-identity issues and
+# lets bpkg find the package in the correct configuration.
+# After any version change, bdep sync re-configures the project packages that
+# were affected.
 #
 # The solution is topology-agnostic: it works with any number of linked
 # configurations in any arrangement. The only configuration type handled
@@ -68,7 +74,7 @@ if ($build.mode         != 'skeleton'    && \
         # libhello specified with dependency package dep1".
         prj_names = $process.run_regex(\
           bdep status -d "$amg_root", \
-          '^([^ ]+) .*', \
+          '^!?([^ ]+) .*', \
           '\1')
         dep_names = [null]
         for n: $allnames
@@ -95,7 +101,30 @@ if ($build.mode         != 'skeleton'    && \
           '^[^ ]+ \[([^\]]*)\] configured.*', \
           '\1'))
 
-        changed = false
+        # Collect all project configurations (absolute paths) as source
+        # candidates for pkg-build.  bdep config list includes every
+        # configuration associated with the project, not only those that hold
+        # external dep packages.  A config that holds no dep packages may still
+        # carry remote repos set up from repositories.manifest by bdep init and
+        # can serve as the source when the package's own config has no repos.
+        # bdep config list output: "@name <abs-path> <id> <type> <flags>"
+        # bdep config list output on Windows uses backslash path separators.
+        # [^ ]+ inside a capturing group followed by further pattern content
+        # does not match these paths reliably, so capture the entire "path rest"
+        # suffix and then extract the path with regex.replace in a loop.
+        cfgs_raw = $process.run_regex(\
+          bdep config list -d "$amg_root", \
+          '^@[^ ]+ (.+)', \
+          '\1')
+        all_cfgs = [null]
+        for cfg_raw: $cfgs_raw
+          all_cfgs += $path.normalize($regex.replace($cfg_raw, \
+            '^([^ ]+) .*', '\1'))
+        all_cfgs = $sort($all_cfgs)
+
+        # For each non-host config that has mismatched packages, collect the
+        # pending pins and apply them via the best available source config.
+        ran_pkg_build = false
         prev_cfg = [null]
         for lcfg: $linked_cfgs
         {
@@ -113,15 +142,15 @@ if ($build.mode         != 'skeleton'    && \
             if ($cfg_type != 'host')
             {
               # Snapshot all packages currently in this configuration as
-              # name/version pairs. Used to identify which pinned packages
-              # are at a different version than required.
+              # captured lines. process.run_regex uses full-line matching so
+              # the pattern must consume the entire output line; the trailing
+              # .+ ensures this. Name and version are then extracted via
+              # regex.replace (partial matching) in the comparison loop.
               before_pkgs = $process.run_regex(\
                 bpkg pkg-status --all -d "$lcfg", \
-                '^!?([^ ]+) configured !?([^ ]+).*', \
-                '\1/\2')
+                '^!?(.+ configured .+)', \
+                '\1')
 
-              # Identify which pinned packages in this configuration are at a
-              # different version than the pin requires.
               pending_pins = [null]
               for pin: $allpins
               {
@@ -130,8 +159,8 @@ if ($build.mode         != 'skeleton'    && \
 
                 for bpkg_entry: $before_pkgs
                 {
-                  bname = $regex.replace($bpkg_entry, '^([^/]+)/.*', '\1')
-                  bver  = $regex.replace($bpkg_entry, '^[^/]+/(.*)', '\1')
+                  bname = $regex.replace($bpkg_entry, '^([^ ]+) .*', '\1')
+                  bver  = $regex.replace($bpkg_entry, '^.+ configured !?([^ ]+).*', '\1')
 
                   if ($bname == $pname)
                   {
@@ -147,34 +176,78 @@ if ($build.mode         != 'skeleton'    && \
 
               if (!$null($pending_pins))
               {
-                # Run bpkg pkg-build directly on the configuration that owns
-                # these packages. bpkg handles the full dependency graph within
-                # that configuration, keeping all same-configuration dependents
-                # in place and reconfiguring them against the new versions.
-                #
-                # --no-move prevents bpkg from trying to reorganize packages
-                # across configurations when the project-directory repository
-                # registered in this configuration makes project packages
-                # visible here while they are already configured elsewhere.
-                #
-                # Plain name/version arguments require the upstream package
-                # repositories (pkg.cppget.org) to be registered in the
-                # configuration. The ? (dependency-repo-search) prefix is NOT
-                # used because it fails for packages that have no dependents in
-                # the same configuration (e.g. catch2, which is a test dep of
-                # project packages that live in the main config, not here).
-                ignored = $process.run(\
-                  bpkg pkg-build --yes --no-move $pending_pins -d "$lcfg")
+                # Find a source configuration to run pkg-build from.
+                # Prefer lcfg itself; fall back to any other project config
+                # that has remote (pkg:/git:) repos.
+                # The pattern must consume the entire line (process.run_regex
+                # uses full-line matching); hence the trailing .* .
+                source_cfg = [null]
+                use_fallback = false
+                has_remote = $process.run_regex(\
+                  bpkg rep-list -d "$lcfg", \
+                  '^(pkg|git):.*', \
+                  '\1')
+                if (!$empty($has_remote))
+                  source_cfg = $lcfg
+                else
+                {
+                  for scfg: $all_cfgs
+                  {
+                    has_remote = $process.run_regex(\
+                      bpkg rep-list -d "$scfg", \
+                      '^(pkg|git):.*', \
+                      '\1')
+                    if (!$empty($has_remote))
+                    {
+                      source_cfg = $scfg
+                      use_fallback = true
+                      break
+                    }
+                  }
+                }
+                if ($null($source_cfg))
+                  fail $path.leaf($lockfile): cannot pin $pending_pins -- \
+                    no project configuration has remote package repositories
 
-                changed = true
+                # When using a fallback source config (different from lcfg),
+                # temporarily borrow source_cfg's remote repositories into
+                # lcfg so that bpkg pkg-build can resolve the pinned version,
+                # then remove them immediately after. Running pkg-build from
+                # lcfg itself keeps bpkg's hold-package db identity correct.
+                if ($use_fallback)
+                {
+                  # Extract remote repo URLs from source_cfg.
+                  # bpkg rep-list output: "<location> <url>".
+                  # Greedy .+ backtracks to the last space, so (.+) captures
+                  # the URL. process.run_regex may yield an empty-string
+                  # element for non-matching lines; the for-loops skip those.
+                  source_repos = [null]
+                  for r: $process.run_regex(\
+                    bpkg rep-list -d "$source_cfg", \
+                    '^pkg:.+ (.+)', '\1')
+                    source_repos += $r
+                  for r: $process.run_regex(\
+                    bpkg rep-list -d "$source_cfg", \
+                    '^git:.+ (.+)', '\1')
+                    source_repos += $r
+                  ignored = $process.run(bpkg rep-add $source_repos -d "$lcfg")
+                  ignored = $process.run(bpkg rep-fetch --trust-yes -d "$lcfg")
+                  ignored = $process.run(\
+                    bpkg pkg-build --yes --no-move $pending_pins -d "$lcfg")
+                  for srepo: $source_repos
+                    ignored = $process.run(bpkg rep-remove "$srepo" -d "$lcfg")
+                }
+                else
+                  ignored = $process.run(\
+                    bpkg pkg-build --yes --no-move $pending_pins -d "$lcfg")
+
+                ran_pkg_build = true
               }
             }
           }
         }
 
-        # After any version changes, re-configure the project packages that
-        # were affected by the version changes above.
-        if ($changed)
+        if ($ran_pkg_build)
           ignored = $process.run(bdep sync --yes -d "$amg_root")
       }
     }

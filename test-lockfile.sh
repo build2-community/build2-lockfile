@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 # Lockfile validation test suite.
-# Run from the project root: bash test-lockfile.sh [--quiet]
+# Run from the project root: bash test-lockfile.sh [--quiet] [--case=N[,N...]]
+#
+# --quiet      suppress per-command output (only show PASS/FAIL lines)
+# --case=N     run only the listed case numbers (comma-separated); e.g.
+#              --case=5 or --case=5,6,21
 #
 # Each test is self-contained: it establishes its own preconditions, runs b,
 # checks the output, then the run_test wrapper resets to baseline state.
 
 set -uo pipefail
+
+# Save the original stdout before any command-substitution redirects it.
+# _run and _capture write live output here so it reaches the terminal even
+# when their own stdout is captured by $().
+exec 3>&1
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -15,7 +24,16 @@ PASS_COUNT=0
 FAIL_COUNT=0
 
 QUIET=false
-[ "${1:-}" = "--quiet" ] && QUIET=true
+CASE_FILTER=''
+
+for _arg in "$@"; do
+  case "$_arg" in
+    --quiet)   QUIET=true ;;
+    --case=*)  CASE_FILTER="${_arg#--case=}" ;;
+    *) printf 'unknown argument: %s\n' "$_arg" >&2; exit 1 ;;
+  esac
+done
+unset _arg
 
 _pass() { printf "${GREEN}[PASS]${NC} %s\n" "$*"; (( ++PASS_COUNT )) || true; }
 _fail() { printf "${RED}[FAIL]${NC} %s\n" "$*"; (( ++FAIL_COUNT )) || true; }
@@ -47,25 +65,29 @@ UUID_EXTRA=$(printf '%s' "hello-${CONFIG_NAME}-extra" | md5sum | \
 # Output helpers
 # --------------------------------------------------------------------------
 
-# Run a command, routing output to the terminal unless --quiet was given.
+# Run a command, writing live output to fd 3 (original stdout) unless --quiet.
 # Use for fire-and-forget setup/teardown commands.
 _run() {
   if [ "$QUIET" = true ]; then
     "$@" >/dev/null 2>&1
   else
-    "$@" >/dev/tty 2>&1
+    "$@" >&3 2>&3
   fi
 }
 
 # Run a command and capture its combined stdout+stderr for assertion, while
-# also writing the output to the terminal unless --quiet was given.
+# also streaming output live to fd 3 (original stdout) unless --quiet.
 # Usage: out=$(_capture cmd args...)
 _capture() {
   local tmpf rc
   tmpf=$(mktemp /tmp/claude/tl-XXXXXX)
-  "$@" >"$tmpf" 2>&1
-  rc=$?
-  [ "$QUIET" = false ] && cat "$tmpf" >/dev/tty
+  if [ "$QUIET" = true ]; then
+    "$@" >"$tmpf" 2>&1
+    rc=$?
+  else
+    "$@" 2>&1 | tee "$tmpf" >&3
+    rc=${PIPESTATUS[0]}
+  fi
   cat "$tmpf"
   rm -f "$tmpf"
   return $rc
@@ -116,11 +138,18 @@ assert_not_contains() {
   fi
 }
 
-# Assert a package is at an exact version in a given bpkg config.
+# Assert a package is directly configured in a given bpkg config at an exact
+# version.  "Directly" means the status line has no [path] bracket after the
+# package name -- a bracket would indicate the package was silently relocated
+# to a linked configuration instead.
 assert_version() {
   local pkg="$1" ver="$2" cfg="$3"
   local status
   status=$(bpkg pkg-status "$pkg" -d "$cfg" 2>&1)
+  if ! printf '%s' "$status" | grep -qE "^!?${pkg} configured"; then
+    printf '%s: expected %s, got: %s\n' "$pkg" "$ver" "$status"
+    return 1
+  fi
   if ! printf '%s' "$status" | grep -qF "$ver"; then
     printf '%s: expected %s, got: %s\n' "$pkg" "$ver" "$status"
     return 1
@@ -135,6 +164,25 @@ run_test() {
   local desc="$1"
   local fn="$2"
   local detail rc
+
+  if [ -n "$CASE_FILTER" ]; then
+    # Extract all numbers from the label prefix (text before the first ':').
+    local label nums matched
+    label="${desc%%:*}"
+    nums=$(printf '%s' "$label" | grep -oE '[0-9]+' | tr '\n' ',')
+    matched=false
+    IFS=',' read -ra _filter_nums <<< "$CASE_FILTER"
+    for _fn in "${_filter_nums[@]}"; do
+      if [ -n "$_fn" ] && printf '%s' ",$nums" | grep -qF ",$_fn,"; then
+        matched=true
+        break
+      fi
+    done
+    unset _filter_nums _fn
+    if [ "$matched" = false ]; then
+      return 0
+    fi
+  fi
 
   detail=$( "$fn" 2>&1 )
   rc=$?
@@ -252,6 +300,7 @@ t_case7_transitive_intf_dep() {
   local out
   out=$(_capture b) || true
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
+  assert_version fmt '10.1.1' "$BUILD_DIR_EXT" || return 1
   local sync_status
   sync_status=$(bdep status 2>&1)
   assert_contains "$sync_status" 'configured'
@@ -271,7 +320,8 @@ t_case9_partial_mismatch() {
   out=$(_capture b) || true
   assert_contains "$out" 'pinning entt' || return 1
   assert_not_contains "$out" 'pinning fmt' || return 1
-  assert_version entt '3.13.2' "$BUILD_DIR_EXT"
+  assert_version entt '3.13.2' "$BUILD_DIR_EXT" || return 1
+  assert_version fmt "$FMT_BASE" "$BUILD_DIR_EXT"
 }
 
 t_case10_revision_suffix() {
@@ -354,6 +404,46 @@ t_case20_unknown_pin() {
   local out
   out=$(_capture b) || true
   assert_not_contains "$out" 'pinning libnothere'
+}
+
+t_case24_pkg_build_no_repo_in_ext_cfg() {
+  # Reproduce: ext config has the package but no remote repos registered.
+  # bpkg pkg-build name/ver -d <ext-cfg> fails with "unknown package" because
+  # the config has no repo containing that version.
+  # Fix: the enforcement must fall back to any linked config that has remote
+  # repos -- here the project bpkg config (BUILD_DIR) acts as that fallback.
+  # In real projects bdep init populates that config from repositories.manifest.
+
+  local repo_urls rc=0
+  repo_urls=$(bpkg rep-list -d "$BUILD_DIR_EXT" | awk '$1 !~ /^dir:/ { print $2 }')
+
+  # Add the same remote repos to the project bpkg config so it can serve as
+  # the fallback source for pkg-build when ext config has none.
+  _run bpkg rep-add $repo_urls -d "$BUILD_DIR"
+  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR"
+
+  # Remove remote repos from ext config to simulate restricted-repo scenario.
+  for url in $repo_urls; do
+    _run bpkg rep-remove "$url" -d "$BUILD_DIR_EXT"
+  done
+
+  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  local out
+  out=$(_capture b) || rc=$?
+
+  # Restore: re-add repos to ext, remove from project config.
+  for url in $repo_urls; do
+    _run bpkg rep-add "$url" -d "$BUILD_DIR_EXT"
+  done
+  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR_EXT"
+  for url in $repo_urls; do
+    _run bpkg rep-remove "$url" -d "$BUILD_DIR" || true
+  done
+
+  assert_not_contains "$out" 'unknown package' || rc=1
+  assert_contains     "$out" 'pinning fmt to 10\.1\.1' || rc=1
+  assert_version fmt '10.1.1' "$BUILD_DIR_EXT" || rc=1
+  return $rc
 }
 
 t_case23_project_package_pin_ignored() {
@@ -511,6 +601,7 @@ run_test "Case 18: generation captures current versions"         t_case18_genera
 run_test "Case 19: testing-repo version round-trips correctly"   t_case19_testing_repo_version
 run_test "Case 20: unknown pin silently skipped"                 t_case20_unknown_pin
 run_test "Case 23: project package name in bdep.lock skipped"    t_case23_project_package_pin_ignored
+run_test "Case 24: enforcement works when ext cfg has no repos"  t_case24_pkg_build_no_repo_in_ext_cfg
 run_test "Cases 21-22: packages spread across two non-host configs" t_cases21_22_multi_config
 
 echo ""
