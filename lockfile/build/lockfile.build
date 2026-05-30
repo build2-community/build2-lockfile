@@ -17,6 +17,10 @@
 # added to the package's own config so pkg-build can resolve the pinned
 # version, then removed immediately after. This avoids db-identity issues and
 # lets bpkg find the package in the correct configuration.
+# --leave-dependent is passed to bpkg pkg-build so that bpkg does not try to
+# reconfigure dependent packages across linked configurations during the pin
+# step. The final bdep sync call handles all reconfiguration correctly in the
+# project's multi-config topology.
 # After any version change, bdep sync re-configures the project packages that
 # were affected.
 #
@@ -68,37 +72,38 @@ if ($build.mode         != 'skeleton'    && \
 
       if (!$null($allpins))
       {
-        # Extract just the package names (without versions) from the pin list.
-        # bdep status must receive names-only: passing 'name/ver' when the
-        # installed version differs returns 'available' with no config path,
-        # which prevents the config-discovery regex from matching.
-        allnames = [null]
-        for pin: $allpins
-          allnames += $regex.replace($pin, '^([^/]+)/.*', '\1')
-
-        # Filter out project-local packages before the bdep status call.
+        # Filter out project-local packages from the pin list.
         # bdep status errors if the same call includes both an initialized
         # project package (pkg-spec) and an external dep (dep-spec): e.g.
         # "bdep status dep1 libhello" fails with "initialized package
         # libhello specified with dependency package dep1".
+        # Also exclude project packages from the inner pin-matching loop:
+        # linked configs (e.g. an external config) may have project packages
+        # shadow-installed by bdep, so using allpins would incorrectly try
+        # to pin those project packages when their version differs.
         prj_names = $process.run_regex(\
           bdep status -d "$amg_root", \
           '^!?([^ ]+) .*', \
           '\1')
         dep_names = [null]
-        for n: $allnames
+        dep_pins  = [null]
+        for pin: $allpins
         {
+          pname = $regex.replace($pin, '^([^/]+)/.*', '\1')
           in_prj = false
           for pn: $prj_names
           {
-            if ($pn == $n)
+            if ($pn == $pname)
             {
               in_prj = true
               break
             }
           }
           if (!$in_prj)
-            dep_names += $n
+          {
+            dep_names += $pname
+            dep_pins  += $pin
+          }
         }
 
         # Discover which configuration each pinned package lives in.
@@ -140,7 +145,7 @@ if ($build.mode         != 'skeleton'    && \
                 '\1')
 
               pending_pins = [null]
-              for pin: $allpins
+              for pin: $dep_pins
               {
                 pname = $regex.replace($pin, '^([^/]+)/.*', '\1')
                 pver  = $regex.replace($pin, '^[^/]+/(.*)', '\1')
@@ -217,13 +222,13 @@ if ($build.mode         != 'skeleton'    && \
                   ignored = $process.run(bpkg rep-add $source_repos -d "$lcfg")
                   ignored = $process.run(bpkg rep-fetch --trust-yes -d "$lcfg")
                   ignored = $process.run(\
-                    bpkg pkg-build --yes --no-move $pending_pins -d "$lcfg")
+                    bpkg pkg-build --yes --no-move --leave-dependent $pending_pins -d "$lcfg")
                   for srepo: $source_repos
                     ignored = $process.run(bpkg rep-remove "$srepo" -d "$lcfg")
                 }
                 else
                   ignored = $process.run(\
-                    bpkg pkg-build --yes --no-move $pending_pins -d "$lcfg")
+                    bpkg pkg-build --yes --no-move --leave-dependent $pending_pins -d "$lcfg")
 
                 ran_pkg_build = true
               }
