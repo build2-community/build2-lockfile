@@ -38,8 +38,6 @@ unset _arg
 _pass() { printf "${GREEN}[PASS]${NC} %s\n" "$*"; (( ++PASS_COUNT )) || true; }
 _fail() { printf "${RED}[FAIL]${NC} %s\n" "$*"; (( ++FAIL_COUNT )) || true; }
 
-bdep status 2>/dev/null || bdep init --empty
-
 # --------------------------------------------------------------------------
 # Environment
 # --------------------------------------------------------------------------
@@ -109,13 +107,62 @@ reset_installed() {
 }
 
 reset_lockfile() {
-  rm -f "$LOCKFILE"
+  git -C "$PROJECT_DIR" checkout -- lockfile/bdep.lock || return 1
+}
+
+regenerate_lockfile() {
   _run b -q config.lockfile.lock=true lockfile/ || return 1
 }
 
 reset_baseline() {
   reset_installed || return 1
   reset_lockfile  || return 1
+}
+
+_init_configs() {
+  [ -d "$BUILD_DIR" ] && return 0
+
+  _run bpkg cfg-create --name host \
+    --directory "$BUILD_DIR_HOST" --type host --wipe cc \
+    config.config.load=~host || return 1
+  _run bpkg cfg-create --name "$CONFIG_NAME" \
+    --directory "$BUILD_DIR" --wipe cc || return 1
+  _run bpkg cfg-create --name "${CONFIG_NAME}-external" \
+    --directory "$BUILD_DIR_EXT" --wipe cc || return 1
+
+  _run bpkg rep-add \
+    https://pkg.cppget.org/1/stable \
+    https://pkg.cppget.org/1/testing \
+    -d "$BUILD_DIR_EXT" || return 1
+  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR_EXT" || return 1
+
+  _run bpkg cfg-link \
+    --directory "$BUILD_DIR" "$BUILD_DIR_EXT" --relative || return 1
+
+  bdep status 2>/dev/null || _run bdep init --empty || return 1
+  _run bdep config add @host \
+    "$BUILD_DIR_HOST" --no-default --forward || return 1
+  _run bdep config add @"${CONFIG_NAME}-external" \
+    "$BUILD_DIR_EXT" --no-default --no-forward || return 1
+  _run bdep config add @"$CONFIG_NAME" \
+    "$BUILD_DIR" --no-default --no-forward || return 1
+  _run bdep config set @"$CONFIG_NAME" --default --forward || return 1
+
+  _run bdep init @"${CONFIG_NAME}-external" \
+    -d libhello -d libworld \
+    -d libhello-tests -d libworld-tests -d lockfile || return 1
+  _run bdep deinit @"${CONFIG_NAME}-external" --force \
+    -d libhello -d libworld \
+    -d libhello-tests -d libworld-tests -d lockfile || return 1
+  _run bpkg pkg-drop \
+    --keep-unused --drop-dependent --yes \
+    libhello libworld libhello-tests libworld-tests lockfile \
+    -d "$BUILD_DIR_EXT" || return 1
+
+  _run bdep init @"$CONFIG_NAME" --no-sync \
+    -d libhello -d libworld \
+    -d libhello-tests -d libworld-tests -d lockfile || return 1
+  _run bdep sync --upgrade --yes || return 1
 }
 
 # --------------------------------------------------------------------------
@@ -384,7 +431,7 @@ t_case19_testing_repo_version() {
 
   if [ "$rc" -eq 0 ]; then
     # After upgrade, regeneration must capture 3.15.0.
-    reset_lockfile || rc=$?
+    regenerate_lockfile || rc=$?
     local lf_content
     lf_content=$(cat "$LOCKFILE")
     assert_contains "$lf_content" 'entt/3\.15\.0' || rc=1
@@ -517,8 +564,7 @@ t_case23_project_package_pin_ignored() {
 # --------------------------------------------------------------------------
 
 t_case18_generation_captures_state() {
-  rm -f "$LOCKFILE"
-  _run b config.lockfile.lock=true lockfile/ || return 1
+  regenerate_lockfile || return 1
 
   local lf
   lf=$(cat "$LOCKFILE")
@@ -632,6 +678,9 @@ fi
 echo "Running lockfile test suite..."
 echo ""
 
+echo "Initialising build configurations..."
+_init_configs || { printf "${RED}ERROR${NC}: failed to initialise build configurations\n"; exit 1; }
+echo ""
 echo "Establishing baseline state..."
 reset_baseline || { printf "${RED}ERROR${NC}: failed to establish baseline state\n"; exit 1; }
 echo ""
