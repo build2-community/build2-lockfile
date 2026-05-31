@@ -250,6 +250,8 @@ run_test() {
   local desc detail rc
   desc=$(_get_desc "$fn")
 
+  printf 'running "Case %2d: %s"...\n' "$num" "$desc"
+
   detail=$( "$fn" 2>&1 )
   rc=$?
 
