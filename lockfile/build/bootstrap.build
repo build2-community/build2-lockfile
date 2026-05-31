@@ -2,8 +2,5 @@ project = lockfile
 
 using version
 using config
-using test
-using install
-using dist
 
 source build/lockfile.build
