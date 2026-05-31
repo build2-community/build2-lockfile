@@ -383,13 +383,13 @@ t_case9_partial_mismatch() {
 }
 
 t_case10_revision_suffix() {
-  # Strip +2 from spdlog: 1.14.1+2 -> 1.14.1. Enforcer must detect mismatch.
+  # Strip +2 from spdlog: 1.14.1+2 -> 1.14.1.
+  # bpkg treats X.Y.Z as satisfied by X.Y.Z+N, so 1.14.1 must NOT trigger
+  # enforcement against an installed 1.14.1+2 -- that would loop forever.
   sed -i 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' "$LOCKFILE"
   local out
-  out=$(_capture b) || true
-  # bpkg pkg-build may fail (1.14.1 without suffix may not exist); the
-  # important check is that the diagnostic fired.
-  assert_contains "$out" 'pinning spdlog'
+  out=$(_capture b) || return 1
+  assert_not_contains "$out" 'pinning spdlog'
 }
 
 # --------------------------------------------------------------------------
@@ -694,7 +694,7 @@ run_test "Case  6: two packages in same config batched"          t_case6_two_pac
 run_test "Case  7: transitive interface dep triggers sync"        t_case7_transitive_intf_dep
 run_test "Case  8: spdlog/fmt version compatibility (no-op)"     t_case8_spdlog_fmt_compat
 run_test "Case  9: partial mismatch only affects entt"           t_case9_partial_mismatch
-run_test "Case 10: +N revision suffix exact string comparison"   t_case10_revision_suffix
+run_test "Case 10: pin without +N is a no-op against any revision"   t_case10_revision_suffix
 run_test "Case 11: host configuration is skipped"                t_case11_host_config_skip
 run_test "Case 12: BDEP_SYNC=false bypasses enforcement"         t_case12_bdep_sync_false
 run_test "Case 13: BDEP_SYNC=0 bypasses enforcement"             t_case13_bdep_sync_zero

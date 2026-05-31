@@ -219,7 +219,13 @@ if ($build.mode         != 'skeleton'    && \
 
                   if ($bname == $pname)
                   {
-                    if ($bver != $pver)
+                    # A pin without +N suffix matches any revision of that base
+                    # version (bpkg semantics: pkg-build X.Y.Z satisfies X.Y.Z+N).
+                    # Only compare full strings when the pin carries an explicit +N.
+                    pbase = $regex.replace($pver, '\+[0-9]+$', '')
+                    bbase = $regex.replace($bver, '\+[0-9]+$', '')
+                    if ($bbase != $pbase || \
+                        ($pver != $pbase && $bver != $pver))
                     {
                       text $path.leaf($lockfile): pinning $pname to $pver in $lcfg \(was $bver\)
                       pending_pins += $pin
