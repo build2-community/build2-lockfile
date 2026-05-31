@@ -1,6 +1,6 @@
 cfg = $path.directory($out_root)
 
-if ($config.lockfile.gen)
+if ($config.lockfile.lock)
 {
   # Resolve the amalgamation root dynamically rather than assuming $src_root/..
   # so the lockfile package works correctly at any nesting depth.
@@ -82,7 +82,7 @@ file{bdep.lock}@./:
 
 ./: file{bdep.lock}:
 {
-  include = $config.lockfile.gen
+  include = $config.lockfile.lock
 }
 
 ./: {*/ -build/} doc{README.md} manifest

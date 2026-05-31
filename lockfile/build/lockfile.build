@@ -42,23 +42,6 @@ if ($build.mode         != 'skeleton'    && \
       $getenv('BDEP_SYNC') == true   || \
       $getenv('BDEP_SYNC') == 1)
   {
-    # Resolve the amalgamation root dynamically rather than assuming $src_root/..
-    # so the lockfile package works correctly at any nesting depth.
-    amg_rel  = $process.run_regex(\
-      b "info:" "$src_root/", \
-      '^amalgamation: (.+)', \
-      '\1')
-    amg_root = $path.normalize($src_root/$amg_rel)
-
-    # Derive the bpkg configuration root from $out_root using the same
-    # amalgamation-relative path. This is the config where the lockfile
-    # package itself is built and is the natural fallback source for pkg-build
-    # when the target config has no remote repos.
-    if ($null($amg_rel))
-      bpkg_cfg = $out_root
-    else
-      bpkg_cfg = $path.normalize($out_root/$amg_rel)
-
     lockfile = [string] $src_root/bdep.lock
     if ($filesystem.file_exists($lockfile))
     {
@@ -72,6 +55,23 @@ if ($build.mode         != 'skeleton'    && \
 
       if (!$null($allpins))
       {
+        # Resolve the amalgamation root dynamically rather than assuming $src_root/..
+        # so the lockfile package works correctly at any nesting depth.
+        amg_rel  = $process.run_regex(\
+          b "info:" "$src_root/", \
+          '^amalgamation: (.+)', \
+          '\1')
+        amg_root = $path.normalize($src_root/$amg_rel)
+
+        # Derive the bpkg configuration root from $out_root using the same
+        # amalgamation-relative path. This is the config where the lockfile
+        # package itself is built and is the natural fallback source for pkg-build
+        # when the target config has no remote repos.
+        if ($null($amg_rel))
+          bpkg_cfg = $out_root
+        else
+          bpkg_cfg = $path.normalize($out_root/$amg_rel)
+
         # Filter out project-local packages from the pin list.
         # bdep status errors if the same call includes both an initialized
         # project package (pkg-spec) and an external dep (dep-spec): e.g.
@@ -114,6 +114,68 @@ if ($build.mode         != 'skeleton'    && \
           bdep status -d "$amg_root" $dep_names, \
           '^[^ ]+ \[([^\]]*)\] configured.*', \
           '\1'))
+
+        # Pre-step: sync remote repositories across bpkg_cfg and the configs it
+        # directly links to. bpkg cfg-info --link lists bpkg_cfg itself first,
+        # then each linked config. Only non-host configs are considered.
+        # This patches setups where the init/deinit dance left linked configs
+        # without direct remote repos.
+        sync_cfgs  = $process.run_regex(\
+          bpkg cfg-info --link -d "$bpkg_cfg", '^path: (.+)', '\1')
+        sync_repos = [null]
+        for sync_cfg: $sync_cfgs
+        {
+          sync_ctype = $process.run_regex(\
+            bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
+          if ($sync_ctype != 'host')
+          {
+            for r: $process.run_regex(\
+              bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
+              sync_repos += $r
+            for r: $process.run_regex(\
+              bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
+              sync_repos += $r
+          }
+        }
+        if (!$null($sync_repos))
+        {
+          for sync_cfg: $sync_cfgs
+          {
+            sync_ctype = $process.run_regex(\
+              bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
+            if ($sync_ctype != 'host')
+            {
+              sync_have = [null]
+              for r: $process.run_regex(\
+                bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
+                sync_have += $r
+              for r: $process.run_regex(\
+                bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
+                sync_have += $r
+              sync_add = [null]
+              for r: $sync_repos
+              {
+                sync_found = false
+                for h: $sync_have
+                {
+                  if ($h == $r)
+                  {
+                    sync_found = true
+                    break
+                  }
+                }
+                if (!$sync_found)
+                  sync_add += $r
+              }
+              if (!$null($sync_add))
+              {
+                text $path.leaf($lockfile): complement with $sync_add [$sync_cfg]
+                ignored = $process.run(bpkg rep-add $sync_add -d "$sync_cfg")
+                ignored = $process.run(bpkg rep-fetch --offline --trust-yes -d "$sync_cfg")
+              }
+            }
+          }
+        }
 
         # For each non-host config that has mismatched packages, collect the
         # pending pins and apply them via the best available source config.
@@ -222,14 +284,15 @@ if ($build.mode         != 'skeleton'    && \
                   ignored = $process.run(bpkg rep-add $source_repos -d "$lcfg")
                   ignored = $process.run(bpkg rep-fetch --trust-yes -d "$lcfg")
                   ignored = $process.run(\
-                    bpkg pkg-build --yes --no-move --leave-dependent $pending_pins -d "$lcfg")
+                    bpkg pkg-build --yes --no-move --configure-only --leave-dependent $pending_pins -d "$lcfg")
                   for srepo: $source_repos
                     ignored = $process.run(bpkg rep-remove "$srepo" -d "$lcfg")
                 }
                 else
+                {
                   ignored = $process.run(\
-                    bpkg pkg-build --yes --no-move --leave-dependent $pending_pins -d "$lcfg")
-
+                    bpkg pkg-build --yes --no-move --configure-only --leave-dependent $pending_pins -d "$lcfg")
+                }
                 ran_pkg_build = true
               }
             }

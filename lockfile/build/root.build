@@ -15,4 +15,4 @@ cxx{*}: extension = cxx
 #
 test.target = $cxx.target
 
-config [bool] config.lockfile.gen ?= false
+config [bool] config.lockfile.lock ?= false

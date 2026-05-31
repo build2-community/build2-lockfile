@@ -16,14 +16,14 @@ correct version by:
 2. For each configuration with a version mismatch, running:
 
    ```
-   bpkg pkg-build --yes --no-move --leave-dependent <name>/<ver> ... -d <cfg>
+   bpkg pkg-build --yes <name>/<ver> ... -d <cfg>
    ```
 
-   `--no-move` keeps every package in the configuration it already belongs to.
-   `--leave-dependent` skips reconfiguring dependents during the pin step. The
-   final `bdep sync` handles all reconfiguration correctly across the project's
-   multi-config topology. Host-type configurations (build-time tools managed by
-   `bdep`) are skipped.
+   This keeps all packages in the configuration they already belong to. `bpkg`
+   handles the full dependency graph within that configuration, including any
+   same-configuration dependents that need to be reconfigured against the new
+   versions. Host-type configurations (build-time tools managed by `bdep`) are
+   skipped.
 
 3. Running `bdep sync` once (if any version was changed) to re-configure the
    project packages that were affected.
@@ -35,7 +35,7 @@ When all configured versions already match their pins this is a fast no-op.
 Refresh the lockfile from the current bpkg configuration state:
 
 ```
-b config.lockfile.gen=true lockfile/
+b config.lockfile.lock=true lockfile/
 ```
 
 Then commit the updated `bdep.lock`. On every subsequent build, the pinned
