@@ -1,41 +1,9 @@
-# libworld - A C++ library
+# libworld
 
-The `libworld` C++ library provides <SUMMARY-OF-FUNCTIONALITY>.
-
+Example C++ library used as a demo package in the
+[build2-lockfile](../README.md) workspace.
 
 ## Usage
 
-To start using `libworld` in your project, add the following `depends`
-value to your `manifest`, adjusting the version constraint as appropriate:
-
-```
-depends: libworld ^<VERSION>
-```
-
-Then import the library in your `buildfile`:
-
-```
-import libs = libworld%lib{<TARGET>}
-```
-
-
-## Importable targets
-
-This package provides the following importable targets:
-
-```
-lib{<TARGET>}
-```
-
-<DESCRIPTION-OF-IMPORTABLE-TARGETS>
-
-
-## Configuration variables
-
-This package provides the following configuration variables:
-
-```
-[bool] config.libworld.<VARIABLE> ?= false
-```
-
-<DESCRIPTION-OF-CONFIG-VARIABLES>
+This package exists only as an example dependency for exercising `lockfile`
+enforcement and is not intended for use in other projects.

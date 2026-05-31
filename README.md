@@ -1,4 +1,4 @@
-# hello
+# hello -- lockfile demo workspace
 
 Development workspace for the `lockfile` build2 package. `libhello` and
 `libworld` are example C++ libraries that depend on `fmt`, `spdlog`, and
@@ -7,12 +7,21 @@ Development workspace for the `lockfile` build2 package. `libhello` and
 
 ## Setup
 
-The project uses three linked `bpkg` configurations. Adjust `CONFIG_NAME` for
-your compiler (`msvc`, `gcc`, etc.).
+The workspace uses three linked `bpkg` configurations. The **host** config
+holds build-time tools (e.g. code generators) managed separately by bdep.
+The **$CONFIG_NAME-external** config fetches and holds third-party packages
+from cppget.org. The **$CONFIG_NAME** config is where the local packages are
+built; it resolves external dependencies through a cfg-link to
+`$CONFIG_NAME-external`.
+
+Adjust `CONFIG_NAME` for your compiler (`msvc`, `gcc`, etc.).
+
+> NOTE: `BASE` must match the name of the directory you cloned into. If you
+> ran `git clone ... my-hello`, set `BASE=my-hello`.
 
 ```sh
 CONFIG_NAME=msvc
-BASE=hello  # matches the directory name
+BASE=hello
 
 # Create configurations
 bpkg cfg-create --name host                    --directory ../$BASE-host                    --type host --wipe cc config.config.load=~host
@@ -51,7 +60,11 @@ bdep sync --upgrade --yes
 ## Lockfile tests
 
 ```sh
-bash test-lockfile.sh [--quiet] [--case=N]
+bash test-lockfile.sh [--compiler=<path>] [--quiet] [--case=N] [--list]
 ```
+
+`--compiler` specifies the compiler to use (e.g. `g++` or `/usr/bin/clang++`).
+If omitted, the script auto-detects the first of `g++`, `clang++`, or `cl.exe`
+found in `PATH`.
 
 See [`lockfile/README.md`](lockfile/README.md) for lockfile package documentation.
