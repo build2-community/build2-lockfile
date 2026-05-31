@@ -2,6 +2,6 @@ libs =
 import libs += libhello%lib{hello}
 import libs += entt%lib{entt}
 
-exe{libhello-tests}: {hxx ixx txx cxx}{**} $libs testscript
+exe{libhello-tests}: {hxx ixx txx cxx}{**} $libs
 
 cxx.poptions =+ "-I$out_root" "-I$src_root"
