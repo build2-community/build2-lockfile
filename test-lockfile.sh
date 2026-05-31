@@ -321,7 +321,7 @@ t_case17_info_skip() {
 }
 
 # --------------------------------------------------------------------------
-# Group B: Version enforcement (cases 5-10)
+# Group B: Version enforcement (cases 5-10, 26)
 # --------------------------------------------------------------------------
 # Dependency topology driving package choices in this group:
 #   fmt   -- interface dep of libhello, exported transitively to libworld and
@@ -390,6 +390,19 @@ t_case10_revision_suffix() {
   local out
   out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning spdlog'
+}
+
+t_case26_explicit_revision_mismatch() {
+  # Change spdlog pin from 1.14.1+2 to 1.14.1+1 (same base, different +N).
+  # Enforcer must detect the mismatch and attempt to pin. Since 1.14.1+1 does
+  # not exist in the repos, bpkg fails with an error -- the important check is
+  # that the mismatch IS detected (not silently treated as a no-op like case 10).
+  sed -i 's|^spdlog/1\.14\.1+2|spdlog/1.14.1+1|' "$LOCKFILE"
+  local out rc=0
+  out=$(_capture b) || true
+  assert_contains "$out" 'pinning spdlog to 1\.14\.1\+1' || rc=1
+  assert_contains "$out" 'error:' || rc=1
+  return $rc
 }
 
 # --------------------------------------------------------------------------
@@ -695,6 +708,7 @@ run_test "Case  7: transitive interface dep triggers sync"        t_case7_transi
 run_test "Case  8: spdlog/fmt version compatibility (no-op)"     t_case8_spdlog_fmt_compat
 run_test "Case  9: partial mismatch only affects entt"           t_case9_partial_mismatch
 run_test "Case 10: pin without +N is a no-op against any revision"   t_case10_revision_suffix
+run_test "Case 26: explicit +N mismatch is detected, bpkg errors if revision unavailable" t_case26_explicit_revision_mismatch
 run_test "Case 11: host configuration is skipped"                t_case11_host_config_skip
 run_test "Case 12: BDEP_SYNC=false bypasses enforcement"         t_case12_bdep_sync_false
 run_test "Case 13: BDEP_SYNC=0 bypasses enforcement"             t_case13_bdep_sync_zero
