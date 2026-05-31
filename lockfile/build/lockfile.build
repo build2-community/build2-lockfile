@@ -46,11 +46,12 @@ if ($build.mode         != 'skeleton'    && \
     if ($filesystem.file_exists($lockfile))
     {
       # Read pinned name/version entries, skipping comments and blank lines.
-      # Strip carriage returns so the file is parsed correctly on Windows where
-      # build2 writes bdep.lock with CRLF line endings.
+      # The \r? handles CRLF line endings: build2 splits process output on \n
+      # only, leaving \r in the line content, and [:space:] excludes \r from
+      # the token so without \r? full-line matching fails on CRLF files.
       allpins = $process.run_regex(\
-        sed -e 's/\r//' "$src_root/bdep.lock", \
-        '^([^#[:space:]][^[:space:]]*)', \
+        cat "$src_root/bdep.lock", \
+        '^([^#[:space:]][^[:space:]]*)\r?', \
         '\1')
 
       if (!$null($allpins))
