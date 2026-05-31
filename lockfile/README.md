@@ -28,13 +28,12 @@ correct version by:
 3. Running `bdep sync` once (if any version was changed) to re-configure the
    project packages that were affected.
 
-When all configured versions already match their pins, no packages are rebuilt
-(bdep status is still queried to check).
+When all configured versions already match their pins, no packages are reconfigured.
 
 ## Workflow
 
 Refresh the lockfile from the current bpkg configuration state (run from the
-workspace root, where `b` is the build2 build driver):
+workspace root):
 
 ```
 b config.lockfile.lock=true lockfile/
@@ -49,7 +48,7 @@ To skip enforcement for one build:
 BDEP_SYNC=false b
 ```
 
-Note: this disables all bdep synchronisation for that build, not just lockfile
+This disables all bdep synchronisation for that build, not just lockfile
 enforcement.
 
 ## bdep.lock format

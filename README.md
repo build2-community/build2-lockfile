@@ -1,14 +1,14 @@
-# hello -- lockfile demo workspace
+# hello - lockfile demo workspace
 
 Development workspace for the `lockfile` build2 package. `libhello` and
 `libworld` are example C++ libraries that depend on `fmt`, `spdlog`, and
-`entt` -- providing a realistic multi-configuration project for exercising
+`entt` - providing a realistic multi-configuration project for exercising
 `lockfile` enforcement.
 
 ## Setup
 
 The workspace uses three linked `bpkg` configurations. The **host** config
-holds build-time tools (e.g. code generators) managed separately by bdep.
+holds build-time tools managed separately by bdep.
 The **$CONFIG_NAME-external** config fetches and holds third-party packages
 from cppget.org. The **$CONFIG_NAME** config is where the local packages are
 built; it resolves external dependencies through a cfg-link to
@@ -16,12 +16,9 @@ built; it resolves external dependencies through a cfg-link to
 
 Adjust `CONFIG_NAME` for your compiler (`msvc`, `gcc`, etc.).
 
-> NOTE: `BASE` must match the name of the directory you cloned into. If you
-> ran `git clone ... my-hello`, set `BASE=my-hello`.
-
 ```sh
 CONFIG_NAME=msvc
-BASE=hello
+BASE=$(basename $(git rev-parse --show-toplevel))
 
 # Create configurations
 bpkg cfg-create --name host                    --directory ../$BASE-host                    --type host --wipe cc config.config.load=~host
@@ -33,17 +30,17 @@ bpkg rep-add https://pkg.cppget.org/1/stable https://pkg.cppget.org/1/testing \
   -d ../$BASE-$CONFIG_NAME-external
 bpkg rep-fetch -d ../$BASE-$CONFIG_NAME-external
 
-# Link main -> external so dependency resolution flows between them
+# Link main -> external
 bpkg cfg-link --directory ../$BASE-$CONFIG_NAME ../$BASE-$CONFIG_NAME-external --relative
 
-# Initialize the bdep project and register all three configurations
+# Init bdep and add all three configs
 bdep init --empty
 bdep config add @host                  ../$BASE-host                    --no-default --forward
 bdep config add @$CONFIG_NAME-external ../$BASE-$CONFIG_NAME-external   --no-default --no-forward
 bdep config add @$CONFIG_NAME          ../$BASE-$CONFIG_NAME            --no-default --no-forward
 bdep config set @$CONFIG_NAME          --default --forward
 
-# Fetch third-party deps into external, then drop the local packages from it
+# Fetch third-party deps into external, then drop the local packages
 bdep init @$CONFIG_NAME-external \
   -d libhello -d libworld -d libhello-tests -d libworld-tests -d lockfile
 bdep deinit @$CONFIG_NAME-external --force \
@@ -51,7 +48,7 @@ bdep deinit @$CONFIG_NAME-external --force \
 bpkg pkg-drop -d ../$BASE-$CONFIG_NAME-external --keep-unused --drop-dependent --yes \
   libhello libworld libhello-tests libworld-tests lockfile
 
-# Initialize local packages into the main config (resolves deps via cfg-link)
+# Init local packages into main config
 bdep init @$CONFIG_NAME --no-sync \
   -d libhello -d libworld -d libhello-tests -d libworld-tests -d lockfile
 bdep sync --upgrade --yes
