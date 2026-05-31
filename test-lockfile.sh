@@ -344,7 +344,7 @@ add_test t_all_versions_match
 
 t_single_mismatch() {
   _desc "single package version mismatch is enforced"
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
   out=$(_capture b) || return 1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
@@ -354,8 +354,8 @@ add_test t_single_mismatch
 
 t_two_packages_same_cfg() {
   _desc "two mismatched packages in the same config are batched"
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
-  sed -i "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
   local out
   out=$(_capture b) || return 1
   assert_contains "$out" 'pinning fmt' || return 1
@@ -368,7 +368,7 @@ add_test t_two_packages_same_cfg
 t_transitive_intf_dep() {
   _desc "pinning a transitive interface dep triggers bdep sync on dependents"
   # spdlog/1.14.1+2 requires fmt ^10.1.1, so 10.1.1 is compatible.
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
   out=$(_capture b) || return 1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
@@ -389,7 +389,7 @@ add_test t_spdlog_fmt_compat
 
 t_partial_mismatch() {
   _desc "partial mismatch only enforces the mismatched package"
-  sed -i "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
+  sed -i '' "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
   local out
   out=$(_capture b) || return 1
   assert_contains "$out" 'pinning entt' || return 1
@@ -404,7 +404,7 @@ t_revision_no_explicit_n() {
   # Strip +2 from spdlog: 1.14.1+2 -> 1.14.1.
   # bpkg treats X.Y.Z as satisfied by X.Y.Z+N, so 1.14.1 must NOT trigger
   # enforcement against an installed 1.14.1+2 -- that would loop forever.
-  sed -i 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' "$LOCKFILE"
+  sed -i '' 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' "$LOCKFILE"
   local out
   out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning spdlog'
@@ -416,7 +416,7 @@ t_explicit_revision_mismatch() {
   # Change spdlog pin from 1.14.1+2 to 1.14.1+1 (same base, different +N).
   # Enforcer must detect the mismatch and attempt to pin. Since 1.14.1+1 does
   # not exist in the repos, bpkg fails with an error.
-  sed -i 's|^spdlog/1\.14\.1+2|spdlog/1.14.1+1|' "$LOCKFILE"
+  sed -i '' 's|^spdlog/1\.14\.1+2|spdlog/1.14.1+1|' "$LOCKFILE"
   local out rc=0
   out=$(_capture b) || true
   assert_contains "$out" 'pinning spdlog to 1\.14\.1\+1' || rc=1
@@ -442,7 +442,7 @@ add_test t_host_config_skip
 
 t_bdep_sync_false() {
   _desc "BDEP_SYNC=false bypasses enforcement"
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
   out=$(BDEP_SYNC=false _capture b) || return 1
   assert_not_contains "$out" 'pinning' || return 1
@@ -452,7 +452,7 @@ add_test t_bdep_sync_false
 
 t_bdep_sync_zero() {
   _desc "BDEP_SYNC=0 bypasses enforcement"
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
   out=$(BDEP_SYNC=0 _capture b) || return 1
   assert_not_contains "$out" 'pinning' || return 1
@@ -463,7 +463,7 @@ add_test t_bdep_sync_zero
 t_crlf_endings() {
   _desc "CRLF line endings in bdep.lock are stripped and enforcement runs"
   # Replace the fmt line with a CRLF-terminated mismatch.
-  sed -i '/^fmt\//d' "$LOCKFILE"
+  sed -i '' '/^fmt\//d' "$LOCKFILE"
   printf 'fmt/10.1.1\r\n' >> "$LOCKFILE"
   local out
   out=$(_capture b) || return 1
@@ -474,7 +474,7 @@ add_test t_crlf_endings
 
 t_configure_skip() {
   _desc "configure meta-operation skips enforcement"
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out rc=0
   out=$(_capture b configure: lockfile/) || return 1
   assert_not_contains "$out" 'pinning' || rc=1
@@ -484,7 +484,7 @@ add_test t_configure_skip
 
 t_disfigure_skip() {
   _desc "disfigure meta-operation skips enforcement"
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out rc=0
   out=$(_capture b disfigure: lockfile/) || rc=$?
   assert_not_contains "$out" 'pinning' || rc=1
@@ -495,7 +495,7 @@ add_test t_disfigure_skip
 
 t_info_skip() {
   _desc "info meta-operation skips enforcement"
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
   out=$(_capture b info: lockfile/) || return 1
   assert_not_contains "$out" 'pinning'
@@ -537,7 +537,7 @@ t_testing_repo_version() {
   local rc=0
 
   # Upgrade entt to testing-repo version.
-  sed -i "s|^entt/.*|entt/3.15.0|" "$LOCKFILE"
+  sed -i '' "s|^entt/.*|entt/3.15.0|" "$LOCKFILE"
   local out
   out=$(_capture b) || rc=$?
   assert_contains "$out" 'pinning entt to 3\.15\.0' || rc=1
@@ -562,7 +562,7 @@ t_testing_repo_version() {
 
   if [ "$rc" -eq 0 ]; then
     # Downgrade back to stable.
-    sed -i "s|^entt/.*|entt/3.14.0|" "$LOCKFILE"
+    sed -i '' "s|^entt/.*|entt/3.14.0|" "$LOCKFILE"
     out=$(_capture b) || rc=$?
     assert_contains "$out" 'pinning entt to 3\.14\.0' || rc=1
   fi
@@ -593,7 +593,7 @@ t_project_package_pin_ignored() {
   # specified with dependency package Y".  The per-name query in
   # lockfile.build avoids this: the project package produces no [cfg-path]
   # line, so it is silently skipped while real deps are still enforced.
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   printf 'lockfile/1.0.0\n' >> "$LOCKFILE"
   local out rc=0
   out=$(_capture b) || { rc=$?; }
@@ -625,7 +625,7 @@ t_pkg_build_no_repo_in_ext_cfg() {
     _run bpkg rep-remove "$url" -d "$BUILD_DIR_EXT" || return 1
   done
 
-  sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
+  sed -i '' "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
   out=$(_capture b) || rc=$?
 
