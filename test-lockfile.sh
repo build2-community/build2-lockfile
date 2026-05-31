@@ -38,6 +38,8 @@ unset _arg
 _pass() { printf "${GREEN}[PASS]${NC} %s\n" "$*"; (( ++PASS_COUNT )) || true; }
 _fail() { printf "${RED}[FAIL]${NC} %s\n" "$*"; (( ++FAIL_COUNT )) || true; }
 
+bdep status 2>/dev/null || bdep init --empty
+
 # --------------------------------------------------------------------------
 # Environment
 # --------------------------------------------------------------------------
@@ -102,18 +104,18 @@ reset_installed() {
     "fmt/${FMT_BASE}" \
     "spdlog/${SPDLOG_BASE}" \
     "entt/${ENTT_BASE}" \
-    -d "$BUILD_DIR_EXT"
-  _run bdep sync --yes -d "$PROJECT_DIR"
+    -d "$BUILD_DIR_EXT" || return 1
+  _run bdep sync --yes -d "$PROJECT_DIR" || return 1
 }
 
 reset_lockfile() {
   rm -f "$LOCKFILE"
-  b -q config.lockfile.gen=true lockfile/ >/dev/null 2>&1
+  _run b -q config.lockfile.lock=true lockfile/ || return 1
 }
 
 reset_baseline() {
-  reset_installed
-  reset_lockfile
+  reset_installed || return 1
+  reset_lockfile  || return 1
 }
 
 # --------------------------------------------------------------------------
@@ -206,7 +208,7 @@ run_test() {
 t_case1_absent_lockfile() {
   mv "$LOCKFILE" "${LOCKFILE}.bak"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   mv "${LOCKFILE}.bak" "$LOCKFILE"
   assert_not_contains "$out" 'pinning'
 }
@@ -214,27 +216,27 @@ t_case1_absent_lockfile() {
 t_case2_empty_lockfile() {
   printf '' > "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning'
 }
 
 t_case3_comments_only() {
   printf '# no pins\n\n' > "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning'
 }
 
 t_case4_all_versions_match() {
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning'
 }
 
 t_case12_bdep_sync_false() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(BDEP_SYNC=false _capture b) || true
+  out=$(BDEP_SYNC=false _capture b) || return 1
   assert_not_contains "$out" 'pinning' || return 1
   assert_version fmt "$FMT_BASE" "$BUILD_DIR_EXT"
 }
@@ -242,7 +244,7 @@ t_case12_bdep_sync_false() {
 t_case13_bdep_sync_zero() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(BDEP_SYNC=0 _capture b) || true
+  out=$(BDEP_SYNC=0 _capture b) || return 1
   assert_not_contains "$out" 'pinning' || return 1
   assert_version fmt "$FMT_BASE" "$BUILD_DIR_EXT"
 }
@@ -250,7 +252,7 @@ t_case13_bdep_sync_zero() {
 t_case15_configure_skip() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out rc=0
-  out=$(_capture b configure: lockfile/) || true
+  out=$(_capture b configure: lockfile/) || return 1
   assert_not_contains "$out" 'pinning' || rc=1
   return $rc
 }
@@ -258,16 +260,16 @@ t_case15_configure_skip() {
 t_case16_disfigure_skip() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out rc=0
-  out=$(_capture b disfigure: lockfile/) || true
+  out=$(_capture b disfigure: lockfile/) || rc=$?
   assert_not_contains "$out" 'pinning' || rc=1
-  b configure: "$BUILD_DIR/" >/dev/null 2>&1 || true
+  _run b configure: "$BUILD_DIR/" || true
   return $rc
 }
 
 t_case17_info_skip() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(_capture b info: lockfile/) || true
+  out=$(_capture b info: lockfile/) || return 1
   assert_not_contains "$out" 'pinning'
 }
 
@@ -287,7 +289,7 @@ t_case17_info_skip() {
 t_case5_single_mismatch() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT"
 }
@@ -296,7 +298,7 @@ t_case6_two_packages_same_cfg() {
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   sed -i "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_contains "$out" 'pinning fmt' || return 1
   assert_contains "$out" 'pinning entt' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT" || return 1
@@ -307,7 +309,7 @@ t_case7_transitive_intf_dep() {
   # spdlog/1.14.1+2 requires fmt ^10.1.1, so 10.1.1 is compatible.
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT" || return 1
   local sync_status
@@ -318,7 +320,7 @@ t_case7_transitive_intf_dep() {
 t_case8_spdlog_fmt_compat() {
   # Both at baseline, lockfile matches: must be a no-op.
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning'
 }
 
@@ -326,7 +328,7 @@ t_case9_partial_mismatch() {
   # Only entt mismatches; fmt already at pinned version.
   sed -i "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_contains "$out" 'pinning entt' || return 1
   assert_not_contains "$out" 'pinning fmt' || return 1
   assert_version entt '3.13.2' "$BUILD_DIR_EXT" || return 1
@@ -351,7 +353,7 @@ t_case11_host_config_skip() {
   # xxd lives in @host. The enforcer must skip host-type configs entirely.
   printf 'xxd/1.0.0\n' >> "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning xxd' || return 1
   assert_version xxd '8.2.3075+2' "$BUILD_DIR_HOST"
 }
@@ -361,7 +363,7 @@ t_case14_crlf_endings() {
   sed -i '/^fmt\//d' "$LOCKFILE"
   printf 'fmt/10.1.1\r\n' >> "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   # build2 built-in sed strips CR; enforcement must run.
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT"
@@ -373,7 +375,7 @@ t_case19_testing_repo_version() {
   # Upgrade entt to testing-repo version.
   sed -i "s|^entt/.*|entt/3.15.0|" "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || rc=$?
   assert_contains "$out" 'pinning entt to 3\.15\.0' || rc=1
 
   if [ "$rc" -eq 0 ]; then
@@ -382,7 +384,7 @@ t_case19_testing_repo_version() {
 
   if [ "$rc" -eq 0 ]; then
     # After upgrade, regeneration must capture 3.15.0.
-    reset_lockfile
+    reset_lockfile || rc=$?
     local lf_content
     lf_content=$(cat "$LOCKFILE")
     assert_contains "$lf_content" 'entt/3\.15\.0' || rc=1
@@ -390,14 +392,14 @@ t_case19_testing_repo_version() {
 
   if [ "$rc" -eq 0 ]; then
     # Immediately after regeneration, must be a no-op.
-    out=$(_capture b) || true
+    out=$(_capture b) || rc=$?
     assert_not_contains "$out" 'pinning' || rc=1
   fi
 
   if [ "$rc" -eq 0 ]; then
     # Downgrade back to stable.
     sed -i "s|^entt/.*|entt/3.14.0|" "$LOCKFILE"
-    out=$(_capture b) || true
+    out=$(_capture b) || rc=$?
     assert_contains "$out" 'pinning entt to 3\.14\.0' || rc=1
   fi
 
@@ -411,7 +413,7 @@ t_case19_testing_repo_version() {
 t_case20_unknown_pin() {
   printf 'libnothere/1.0.0\n' >> "$LOCKFILE"
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning libnothere'
 }
 
@@ -428,12 +430,12 @@ t_case24_pkg_build_no_repo_in_ext_cfg() {
 
   # Add the same remote repos to the project bpkg config so it can serve as
   # the fallback source for pkg-build when ext config has none.
-  _run bpkg rep-add $repo_urls -d "$BUILD_DIR"
-  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR"
+  _run bpkg rep-add $repo_urls -d "$BUILD_DIR" || return 1
+  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR" || return 1
 
   # Remove remote repos from ext config to simulate restricted-repo scenario.
   for url in $repo_urls; do
-    _run bpkg rep-remove "$url" -d "$BUILD_DIR_EXT"
+    _run bpkg rep-remove "$url" -d "$BUILD_DIR_EXT" || return 1
   done
 
   sed -i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
@@ -468,8 +470,8 @@ t_case25_config_uuid_target_has_repos() {
   ext_uuid=$(bpkg cfg-info -d "$BUILD_DIR_EXT" | awk '/^uuid:/{print $2}')
 
   # Add legacy repo to ext so fmt/10.1.1 is resolvable from ext's own repos.
-  _run bpkg rep-add  "$legacy_url" -d "$BUILD_DIR_EXT"
-  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR_EXT"
+  _run bpkg rep-add  "$legacy_url" -d "$BUILD_DIR_EXT" || return 1
+  _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR_EXT" || return 1
 
   local out rc=0
   out=$(_capture bpkg pkg-build --yes --no-move \
@@ -516,7 +518,7 @@ t_case23_project_package_pin_ignored() {
 
 t_case18_generation_captures_state() {
   rm -f "$LOCKFILE"
-  _run b config.lockfile.gen=true lockfile/
+  _run b config.lockfile.lock=true lockfile/ || return 1
 
   local lf
   lf=$(cat "$LOCKFILE")
@@ -531,7 +533,7 @@ t_case18_generation_captures_state() {
 
   # Immediately after generation must be a no-op.
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || return 1
   assert_not_contains "$out" 'pinning'
 }
 
@@ -594,7 +596,7 @@ spdlog/1.14.1+2
 EOF
 
   local out
-  out=$(_capture b) || true
+  out=$(_capture b) || rc=$?
 
   # Two "pinning" diagnostics, one per config.
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || rc=1
@@ -628,6 +630,10 @@ if [ ! -f packages.manifest ]; then
 fi
 
 echo "Running lockfile test suite..."
+echo ""
+
+echo "Establishing baseline state..."
+reset_baseline || { printf "${RED}ERROR${NC}: failed to establish baseline state\n"; exit 1; }
 echo ""
 
 run_test "Case  1: absent lockfile is a no-op"                   t_case1_absent_lockfile
