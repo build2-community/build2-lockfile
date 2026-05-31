@@ -2,9 +2,10 @@
 # Lockfile validation test suite.
 # Run from the project root: bash test-lockfile.sh [--quiet] [--case=N[,N...]] [--list]
 #
-# --quiet      suppress per-command output (only show PASS/FAIL lines)
-# --case=N     run only the listed case numbers (comma-separated)
-# --list       print all case numbers and descriptions, then exit
+# --compiler=PATH  compiler used to derive CONFIG_NAME (auto-detects g++, clang++, cl.exe if omitted)
+# --quiet          suppress per-command output (only show PASS/FAIL lines)
+# --case=N         run only the listed case numbers (comma-separated)
+# --list           print all case numbers and descriptions, then exit
 #
 # Each test function calls _desc "..." as its very first statement. Case
 # numbers are assigned sequentially in the order add_test is called. The
@@ -28,12 +29,14 @@ FAIL_COUNT=0
 QUIET=false
 CASE_FILTER=''
 LIST_MODE=false
+COMPILER_ARG=''
 
 for _arg in "$@"; do
   case "$_arg" in
-    --quiet)   QUIET=true ;;
-    --case=*)  CASE_FILTER="${_arg#--case=}" ;;
-    --list)    LIST_MODE=true ;;
+    --quiet)       QUIET=true ;;
+    --case=*)      CASE_FILTER="${_arg#--case=}" ;;
+    --list)        LIST_MODE=true ;;
+    --compiler=*)  COMPILER_ARG="${_arg#--compiler=}" ;;
     *) printf 'unknown argument: %s\n' "$_arg" >&2; exit 1 ;;
   esac
 done
@@ -72,7 +75,23 @@ _get_desc() {
 # --------------------------------------------------------------------------
 
 PROJECT_DIR=$(pwd)
-CONFIG_NAME=msvc
+
+_compiler=${COMPILER_ARG:-}
+if [ -z "$_compiler" ]; then
+  for _c in g++ clang++ cl.exe; do
+    command -v "$_c" >/dev/null 2>&1 && { _compiler=$_c; break; }
+  done
+fi
+[ -z "$_compiler" ] && { printf 'error: no compiler found; pass --compiler=<path>\n' >&2; exit 1; }
+_exe=$(basename "$_compiler")
+case ${_exe%%.*} in
+  g++)     CONFIG_NAME=gcc   ;;
+  clang++) CONFIG_NAME=clang ;;
+  cl)      CONFIG_NAME=msvc  ;;
+  *)       CONFIG_NAME=${_exe%%.*} ;;
+esac
+unset _compiler _c _exe
+
 CONFIG_NAME_EXT=${CONFIG_NAME}-external
 BUILD_DIR_HOST=${PROJECT_DIR}/../hello-host
 BUILD_DIR=${PROJECT_DIR}/../hello-${CONFIG_NAME}
