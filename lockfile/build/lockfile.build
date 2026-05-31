@@ -1,0 +1,153 @@
+# Apply pinned dependency versions to the bpkg configurations.
+# Sourced from build/bootstrap.build.
+#
+# The lockfile (bdep.lock) lives in $src_root (the lockfile package source
+# dir). On every build, it reads the pinned name/version entries and enforces
+# them in the bpkg configurations that contain those packages.
+#
+# Packages are discovered per-configuration via bdep status. For each non-host
+# configuration that contains packages with version mismatches, bpkg pkg-build
+# is run directly on that configuration. This keeps all packages in the
+# configuration they already belong to and lets bpkg handle the full dependency
+# graph within that configuration (including any same-configuration dependents
+# that need to be reconfigured). After any version change, bdep sync
+# re-configures the project packages that were affected.
+#
+# The solution is topology-agnostic: it works with any number of linked
+# configurations in any arrangement. The only configuration type handled
+# explicitly is 'host', which is skipped because host configurations contain
+# build-time tools managed separately by bdep.
+#
+# To disable enforcement for one build:
+#
+#   BDEP_SYNC=false b
+#
+if ($build.mode         != 'skeleton'    && \
+    !$null($build.meta_operation)        && \
+    $build.meta_operation != 'info'      && \
+    $build.meta_operation != 'configure' && \
+    $build.meta_operation != 'disfigure')
+{
+  if ($getenv('BDEP_SYNC') == [null] || \
+      $getenv('BDEP_SYNC') == true   || \
+      $getenv('BDEP_SYNC') == 1)
+  {
+    lockfile = [string] $src_root/bdep.lock
+    if ($filesystem.file_exists($lockfile))
+    {
+      # Read pinned name/version entries, skipping comments and blank lines.
+      # Strip carriage returns so the file is parsed correctly on Windows where
+      # build2 writes bdep.lock with CRLF line endings.
+      allpins = $process.run_regex(\
+        sed -e 's/\r//' "$src_root/bdep.lock", \
+        '^([^#[:space:]][^[:space:]]*)', \
+        '\1')
+
+      if (!$null($allpins))
+      {
+        # Extract just the package names (without versions) from the pin list.
+        # bdep status must receive names-only: passing 'name/ver' when the
+        # installed version differs returns 'available' with no config path,
+        # which prevents the config-discovery regex from matching.
+        allnames = [null]
+        for pin: $allpins
+          allnames += $regex.replace($pin, '^([^/]+)/.*', '\1')
+
+        # Discover which configuration each pinned package lives in.
+        # bdep status reports packages from linked configurations with the
+        # configuration path in square brackets after the package name.
+        # Sort results so identical paths are adjacent for dedup below.
+        linked_cfgs = $sort($process.run_regex(\
+          bdep status -d "$src_root/.." $allnames, \
+          '^[^ ]+ \[([^\]]*)\] configured.*', \
+          '\1'))
+
+        changed = false
+        prev_cfg = [null]
+        for lcfg: $linked_cfgs
+        {
+          if ($lcfg != $prev_cfg)
+          {
+            prev_cfg = $lcfg
+
+            # Skip host-type configurations: they contain build-time tools
+            # managed separately by bdep.
+            cfg_type = $process.run_regex(\
+              bpkg cfg-info -d "$lcfg", \
+              '^type: (.+)', \
+              '\1')
+
+            if ($cfg_type != 'host')
+            {
+              # Snapshot all packages currently in this configuration as
+              # name/version pairs. Used to identify which pinned packages
+              # are at a different version than required.
+              before_pkgs = $process.run_regex(\
+                bpkg pkg-status --all -d "$lcfg", \
+                '^!?([^ ]+) configured !?([^ ]+).*', \
+                '\1/\2')
+
+              # Identify which pinned packages in this configuration are at a
+              # different version than the pin requires.
+              pending_pins = [null]
+              for pin: $allpins
+              {
+                pname = $regex.replace($pin, '^([^/]+)/.*', '\1')
+                pver  = $regex.replace($pin, '^[^/]+/(.*)', '\1')
+
+                for bpkg_entry: $before_pkgs
+                {
+                  bname = $regex.replace($bpkg_entry, '^([^/]+)/.*', '\1')
+                  bver  = $regex.replace($bpkg_entry, '^[^/]+/(.*)', '\1')
+
+                  if ($bname == $pname)
+                  {
+                    if ($bver != $pver)
+                    {
+                      text $path.leaf($lockfile): pinning $pname to $pver in $lcfg \(was $bver\)
+                      pending_pins += $pin
+                    }
+                    break
+                  }
+                }
+              }
+
+              if (!$null($pending_pins))
+              {
+                # Run bpkg pkg-build directly on the configuration that owns
+                # these packages. bpkg handles the full dependency graph within
+                # that configuration, keeping all same-configuration dependents
+                # in place and reconfiguring them against the new versions.
+                #
+                # The ? (dependency) prefix is required because linked
+                # configurations typically only have the project directory as a
+                # directly-registered repository and do not have the upstream
+                # package repositories registered.  The ? prefix instructs bpkg
+                # to search prerequisite repositories of existing dependents in
+                # this configuration, which do include the upstream repos.
+                #
+                # --no-move prevents bpkg from trying to reorganize packages
+                # across configurations when the project-directory repository
+                # registered in this configuration makes project packages
+                # visible here while they are already configured elsewhere.
+                dep_pins = [null]
+                for pin: $pending_pins
+                  dep_pins += "?$pin"
+
+                ignored = $process.run(\
+                  bpkg pkg-build --yes --no-move $dep_pins -d "$lcfg")
+
+                changed = true
+              }
+            }
+          }
+        }
+
+        # After any version changes, re-configure the project packages that
+        # were affected by the version changes above.
+        if ($changed)
+          ignored = $process.run(bdep sync --yes -d "$src_root/..")
+      }
+    }
+  }
+}

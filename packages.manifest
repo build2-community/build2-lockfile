@@ -1,4 +1,7 @@
 : 1
+location: lockfile/
+
+:
 location: libhello/
 
 :

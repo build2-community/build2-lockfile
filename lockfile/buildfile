@@ -1,0 +1,30 @@
+cfg = $path.directory($out_root)
+
+if ($config.lockfile.gen)
+  pins = $process.run_regex(\
+    bpkg pkg-status --all --link -d "$cfg", \
+    '^([^!? ][^ ]*) \[[^\]]*\] configured !?([^ ]*).*', \
+    '\1/\2')
+
+# backlink = true creates a symlink $src_root/bdep.lock -> $out_root/bdep.lock.
+#
+file{bdep.lock}@./:
+{{
+  depdb hash $pins
+
+  diag generate $>
+  lf = $path($>)
+  true > $lf
+  for pin: $pins
+  {
+    echo $pin >> $lf
+  }
+}}
+
+./: file{bdep.lock}:
+{
+  include  = $config.lockfile.gen
+  backlink = true
+}
+
+./: {*/ -build/} doc{README.md} manifest

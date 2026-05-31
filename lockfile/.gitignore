@@ -1,0 +1,7 @@
+# Lockfile output.
+#
+*.d
+
+# Compilation database.
+#
+compile_commands.json
