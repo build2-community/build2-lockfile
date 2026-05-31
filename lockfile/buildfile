@@ -67,7 +67,7 @@ if ($config.lockfile.lock)
   pins = $sort($pins)
 }
 
-file{bdep.lock}@./:
+file{bdep.lock}:
 {{
   depdb hash $pins
 
