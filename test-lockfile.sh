@@ -21,6 +21,7 @@ exec 3>&1
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+BLUE='\033[1;34m'
 NC='\033[0m'
 
 PASS_COUNT=0
@@ -273,7 +274,7 @@ run_test() {
   local desc detail rc
   desc=$(_get_desc "$fn")
 
-  printf 'running "Case %2d: %s"...\n' "$num" "$desc"
+  printf "${BLUE}[RUN]${NC} Case %2d: %s\n" "$num" "$desc"
 
   detail=$( "$fn" 2>&1 )
   rc=$?
