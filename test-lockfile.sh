@@ -109,6 +109,10 @@ UUID_EXTRA=$(printf '%s' "hello-${CONFIG_NAME}-extra" | md5sum | \
   awk '{printf "%s-%s-%s-%s-%s",
        substr($1,1,8),substr($1,9,4),substr($1,13,4),substr($1,17,4),substr($1,21,12)}')
 
+# Purge .bdep and any leftover configuration directories so each run starts clean.
+rm -rf "$PROJECT_DIR/.bdep" \
+       "$BUILD_DIR_HOST" "$BUILD_DIR" "$BUILD_DIR_EXT" "$BUILD_DIR_EXTRA"
+
 # --------------------------------------------------------------------------
 # Output helpers
 # --------------------------------------------------------------------------
