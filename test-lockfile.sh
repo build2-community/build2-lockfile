@@ -281,6 +281,7 @@ run_test() {
   local desc detail rc
   desc=$(_get_desc "$fn")
 
+  _run bdep sync --yes -d "$PROJECT_DIR"
   printf "${BLUE}[RUN]${NC} Case %2d: %s\n" "$num" "$desc"
 
   detail=$( "$fn" 2>&1 )
@@ -308,7 +309,8 @@ t_absent_lockfile() {
   local out
   out=$(_capture b lockfile/) || return 1
   mv "${LOCKFILE}.bak" "$LOCKFILE"
-  assert_not_contains "$out" 'pinning'
+  assert_not_contains "$out" 'pinning' || return 1
+  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
 }
 add_test t_absent_lockfile
 
@@ -317,7 +319,8 @@ t_empty_lockfile() {
   printf '' > "$LOCKFILE"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning'
+  assert_not_contains "$out" 'pinning' || return 1
+  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
 }
 add_test t_empty_lockfile
 
@@ -326,7 +329,8 @@ t_comments_only() {
   printf '# no pins\n\n' > "$LOCKFILE"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning'
+  assert_not_contains "$out" 'pinning' || return 1
+  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
 }
 add_test t_comments_only
 
@@ -334,7 +338,8 @@ t_all_versions_match() {
   _desc "all versions already match is a no-op"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning'
+  assert_not_contains "$out" 'pinning' || return 1
+  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
 }
 add_test t_all_versions_match
 
@@ -391,7 +396,8 @@ t_spdlog_fmt_compat() {
   _desc "spdlog and fmt both at baseline versions is a no-op"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning'
+  assert_not_contains "$out" 'pinning' || return 1
+  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
 }
 add_test t_spdlog_fmt_compat
 
@@ -415,7 +421,8 @@ t_revision_no_explicit_n() {
   sed_i 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' "$LOCKFILE"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning spdlog'
+  assert_not_contains "$out" 'pinning spdlog' || return 1
+  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
 }
 add_test t_revision_no_explicit_n
 
