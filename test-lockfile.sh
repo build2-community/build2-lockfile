@@ -246,6 +246,17 @@ assert_not_contains() {
   fi
 }
 
+# Assert output is exactly the build2 'is up to date' info line for the
+# lockfile package in the given config -- any other lockfile-hook output fails.
+assert_uptodate() {
+  local out="$1" cfg="$2"
+  local pattern="^info:.*hello-lockfile-${cfg}.*is up to date$"
+  if [[ ! "$out" =~ $pattern ]]; then
+    printf 'expected sole up-to-date output, got:\n%s\n' "$out"
+    return 1
+  fi
+}
+
 # Assert a package is configured in a bpkg config at an exact version.
 assert_version() {
   local pkg="$1" ver="$2" cfg="$3"
@@ -309,8 +320,7 @@ t_absent_lockfile() {
   local out
   out=$(_capture b lockfile/) || return 1
   mv "${LOCKFILE}.bak" "$LOCKFILE"
-  assert_not_contains "$out" 'pinning' || return 1
-  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
+  assert_uptodate "$out" "$CONFIG_NAME"
 }
 add_test t_absent_lockfile
 
@@ -319,8 +329,7 @@ t_empty_lockfile() {
   printf '' > "$LOCKFILE"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning' || return 1
-  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
+  assert_uptodate "$out" "$CONFIG_NAME"
 }
 add_test t_empty_lockfile
 
@@ -329,8 +338,7 @@ t_comments_only() {
   printf '# no pins\n\n' > "$LOCKFILE"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning' || return 1
-  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
+  assert_uptodate "$out" "$CONFIG_NAME"
 }
 add_test t_comments_only
 
@@ -338,8 +346,7 @@ t_all_versions_match() {
   _desc "all versions already match is a no-op"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning' || return 1
-  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
+  assert_uptodate "$out" "$CONFIG_NAME"
 }
 add_test t_all_versions_match
 
@@ -396,8 +403,7 @@ t_spdlog_fmt_compat() {
   _desc "spdlog and fmt both at baseline versions is a no-op"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning' || return 1
-  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
+  assert_uptodate "$out" "$CONFIG_NAME"
 }
 add_test t_spdlog_fmt_compat
 
@@ -421,8 +427,7 @@ t_revision_no_explicit_n() {
   sed_i 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' "$LOCKFILE"
   local out
   out=$(_capture b lockfile/) || return 1
-  assert_not_contains "$out" 'pinning spdlog' || return 1
-  assert_contains "$out" "info:.*hello-lockfile-${CONFIG_NAME}.*dir[{]lockfile.[}] is up to date"
+  assert_uptodate "$out" "$CONFIG_NAME"
 }
 add_test t_revision_no_explicit_n
 
