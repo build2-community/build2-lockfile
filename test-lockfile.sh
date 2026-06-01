@@ -157,7 +157,7 @@ fi
 # --------------------------------------------------------------------------
 
 reset_installed() {
-  _run bpkg pkg-build --yes \
+  _run bpkg pkg-build --yes --configure-only \
     "fmt/${FMT_BASE}" \
     "spdlog/${SPDLOG_BASE}" \
     "entt/${ENTT_BASE}" \
