@@ -306,7 +306,7 @@ t_absent_lockfile() {
   _desc "absent lockfile is a no-op"
   mv "$LOCKFILE" "${LOCKFILE}.bak"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   mv "${LOCKFILE}.bak" "$LOCKFILE"
   assert_not_contains "$out" 'pinning'
 }
@@ -316,7 +316,7 @@ t_empty_lockfile() {
   _desc "empty lockfile is a no-op"
   printf '' > "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning'
 }
 add_test t_empty_lockfile
@@ -325,7 +325,7 @@ t_comments_only() {
   _desc "comments-only lockfile is a no-op"
   printf '# no pins\n\n' > "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning'
 }
 add_test t_comments_only
@@ -333,7 +333,7 @@ add_test t_comments_only
 t_all_versions_match() {
   _desc "all versions already match is a no-op"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning'
 }
 add_test t_all_versions_match
@@ -354,7 +354,7 @@ t_single_mismatch() {
   _desc "single package version mismatch is enforced"
   sed_i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT"
 }
@@ -365,7 +365,7 @@ t_two_packages_same_cfg() {
   sed_i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   sed_i "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_contains "$out" 'pinning fmt' || return 1
   assert_contains "$out" 'pinning entt' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT" || return 1
@@ -378,7 +378,7 @@ t_transitive_intf_dep() {
   # spdlog/1.14.1+2 requires fmt ^10.1.1, so 10.1.1 is compatible.
   sed_i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT" || return 1
   local sync_status
@@ -390,7 +390,7 @@ add_test t_transitive_intf_dep
 t_spdlog_fmt_compat() {
   _desc "spdlog and fmt both at baseline versions is a no-op"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning'
 }
 add_test t_spdlog_fmt_compat
@@ -399,7 +399,7 @@ t_partial_mismatch() {
   _desc "partial mismatch only enforces the mismatched package"
   sed_i "s|^entt/.*|entt/3.13.2|" "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_contains "$out" 'pinning entt' || return 1
   assert_not_contains "$out" 'pinning fmt' || return 1
   assert_version entt '3.13.2' "$BUILD_DIR_EXT" || return 1
@@ -414,7 +414,7 @@ t_revision_no_explicit_n() {
   # enforcement against an installed 1.14.1+2 -- that would loop forever.
   sed_i 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning spdlog'
 }
 add_test t_revision_no_explicit_n
@@ -426,7 +426,7 @@ t_explicit_revision_mismatch() {
   # not exist in the repos, bpkg fails with an error.
   sed_i 's|^spdlog/1\.14\.1+2|spdlog/1.14.1+1|' "$LOCKFILE"
   local out rc=0
-  out=$(_capture b) || true
+  out=$(_capture b lockfile/) || true
   assert_contains "$out" 'pinning spdlog to 1\.14\.1\+1' || rc=1
   assert_contains "$out" 'error:' || rc=1
   return $rc
@@ -442,7 +442,7 @@ t_host_config_skip() {
   # xxd lives in @host. The enforcer must skip host-type configs entirely.
   printf 'xxd/1.0.0\n' >> "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning xxd' || return 1
   assert_version xxd '8.2.3075+2' "$BUILD_DIR_HOST"
 }
@@ -452,7 +452,7 @@ t_bdep_sync_false() {
   _desc "BDEP_SYNC=false bypasses enforcement"
   sed_i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(BDEP_SYNC=false _capture b) || return 1
+  out=$(BDEP_SYNC=false _capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning' || return 1
   assert_version fmt "$FMT_BASE" "$BUILD_DIR_EXT"
 }
@@ -462,7 +462,7 @@ t_bdep_sync_zero() {
   _desc "BDEP_SYNC=0 bypasses enforcement"
   sed_i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(BDEP_SYNC=0 _capture b) || return 1
+  out=$(BDEP_SYNC=0 _capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning' || return 1
   assert_version fmt "$FMT_BASE" "$BUILD_DIR_EXT"
 }
@@ -474,7 +474,7 @@ t_crlf_endings() {
   sed_i '/^fmt\//d' "$LOCKFILE"
   printf 'fmt/10.1.1\r\n' >> "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || return 1
   assert_version fmt '10.1.1' "$BUILD_DIR_EXT"
 }
@@ -531,7 +531,7 @@ t_generation_captures_state() {
 
   # Immediately after generation must be a no-op.
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning'
 }
 add_test t_generation_captures_state
@@ -547,7 +547,7 @@ t_testing_repo_version() {
   # Upgrade entt to testing-repo version.
   sed_i "s|^entt/.*|entt/3.15.0|" "$LOCKFILE"
   local out
-  out=$(_capture b) || rc=$?
+  out=$(_capture b lockfile/) || rc=$?
   assert_contains "$out" 'pinning entt to 3\.15\.0' || rc=1
 
   if [ "$rc" -eq 0 ]; then
@@ -564,14 +564,14 @@ t_testing_repo_version() {
 
   if [ "$rc" -eq 0 ]; then
     # Immediately after regeneration, must be a no-op.
-    out=$(_capture b) || rc=$?
+    out=$(_capture b lockfile/) || rc=$?
     assert_not_contains "$out" 'pinning' || rc=1
   fi
 
   if [ "$rc" -eq 0 ]; then
     # Downgrade back to stable.
     sed_i "s|^entt/.*|entt/3.14.0|" "$LOCKFILE"
-    out=$(_capture b) || rc=$?
+    out=$(_capture b lockfile/) || rc=$?
     assert_contains "$out" 'pinning entt to 3\.14\.0' || rc=1
   fi
 
@@ -587,7 +587,7 @@ t_unknown_pin() {
   _desc "unknown package name in bdep.lock is silently skipped"
   printf 'libnothere/1.0.0\n' >> "$LOCKFILE"
   local out
-  out=$(_capture b) || return 1
+  out=$(_capture b lockfile/) || return 1
   assert_not_contains "$out" 'pinning libnothere'
 }
 add_test t_unknown_pin
@@ -604,7 +604,7 @@ t_project_package_pin_ignored() {
   sed_i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   printf 'lockfile/1.0.0\n' >> "$LOCKFILE"
   local out rc=0
-  out=$(_capture b) || { rc=$?; }
+  out=$(_capture b lockfile/) || { rc=$?; }
   assert_not_contains "$out" 'error:' || rc=1
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || rc=1
   assert_not_contains "$out" 'pinning lockfile' || rc=1
@@ -635,7 +635,7 @@ t_pkg_build_no_repo_in_ext_cfg() {
 
   sed_i "s|^fmt/.*|fmt/10.1.1|" "$LOCKFILE"
   local out
-  out=$(_capture b) || rc=$?
+  out=$(_capture b lockfile/) || rc=$?
 
   # Restore: re-add repos to ext, remove from project config.
   for url in $repo_urls; do
@@ -747,7 +747,7 @@ spdlog/1.14.1+2
 EOF
 
   local out
-  out=$(_capture b) || rc=$?
+  out=$(_capture b lockfile/) || rc=$?
 
   # Two "pinning" diagnostics, one per config.
   assert_contains "$out" 'pinning fmt to 10\.1\.1' || rc=1
