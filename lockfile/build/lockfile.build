@@ -107,207 +107,210 @@ if ($build.mode         != 'skeleton'    && \
           }
         }
 
-        # Discover which configuration each pinned package lives in.
-        # bdep status reports packages from linked configurations with the
-        # configuration path in square brackets after the package name.
-        # Sort results so identical paths are adjacent for dedup below.
-        linked_cfgs = $sort($process.run_regex(\
-          bdep status -d "$amg_root" $dep_names, \
-          '^[^ ]+ \[([^\]]*)\] configured.*', \
-          '\1'))
+        if (!$null($dep_pins) && !$empty($dep_pins))
+        {
+          # Discover which configuration each pinned package lives in.
+          # bdep status reports packages from linked configurations with the
+          # configuration path in square brackets after the package name.
+          # Sort results so identical paths are adjacent for dedup below.
+          linked_cfgs = $sort($process.run_regex(\
+            bdep status -d "$amg_root" $dep_names, \
+            '^[^ ]+ \[([^\]]*)\] configured.*', \
+            '\1'))
 
-        # Pre-step: sync remote repositories across bpkg_cfg and the configs it
-        # directly links to. bpkg cfg-info --link lists bpkg_cfg itself first,
-        # then each linked config. Only non-host configs are considered.
-        # This patches setups where the init/deinit dance left linked configs
-        # without direct remote repos.
-        sync_cfgs  = $process.run_regex(\
-          bpkg cfg-info --link -d "$bpkg_cfg", '^path: (.+)', '\1')
-        sync_repos = [null]
-        for sync_cfg: $sync_cfgs
-        {
-          sync_ctype = $process.run_regex(\
-            bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
-          if ($sync_ctype != 'host')
-          {
-            for r: $process.run_regex(\
-              bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
-              sync_repos += $r
-            for r: $process.run_regex(\
-              bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
-              sync_repos += $r
-          }
-        }
-        if (!$null($sync_repos))
-        {
+          # Pre-step: sync remote repositories across bpkg_cfg and the configs it
+          # directly links to. bpkg cfg-info --link lists bpkg_cfg itself first,
+          # then each linked config. Only non-host configs are considered.
+          # This patches setups where the init/deinit dance left linked configs
+          # without direct remote repos.
+          sync_cfgs  = $process.run_regex(\
+            bpkg cfg-info --link -d "$bpkg_cfg", '^path: (.+)', '\1')
+          sync_repos = [null]
           for sync_cfg: $sync_cfgs
           {
             sync_ctype = $process.run_regex(\
               bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
             if ($sync_ctype != 'host')
             {
-              sync_have = [null]
               for r: $process.run_regex(\
                 bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
-                sync_have += $r
+                sync_repos += $r
               for r: $process.run_regex(\
                 bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
-                sync_have += $r
-              sync_add = [null]
-              for r: $sync_repos
+                sync_repos += $r
+            }
+          }
+          if (!$null($sync_repos))
+          {
+            for sync_cfg: $sync_cfgs
+            {
+              sync_ctype = $process.run_regex(\
+                bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
+              if ($sync_ctype != 'host')
               {
-                sync_found = false
-                for h: $sync_have
+                sync_have = [null]
+                for r: $process.run_regex(\
+                  bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
+                  sync_have += $r
+                for r: $process.run_regex(\
+                  bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
+                  sync_have += $r
+                sync_add = [null]
+                for r: $sync_repos
                 {
-                  if ($h == $r)
+                  sync_found = false
+                  for h: $sync_have
                   {
-                    sync_found = true
-                    break
+                    if ($h == $r)
+                    {
+                      sync_found = true
+                      break
+                    }
                   }
+                  if (!$sync_found)
+                    sync_add += $r
                 }
-                if (!$sync_found)
-                  sync_add += $r
-              }
-              if (!$null($sync_add))
-              {
-                text $path.leaf($lockfile): complement with $sync_add [$sync_cfg]
-                ignored = $process.run(bpkg rep-add $sync_add -d "$sync_cfg")
-                ignored = $process.run(bpkg rep-fetch --offline --trust-yes -d "$sync_cfg")
+                if (!$null($sync_add))
+                {
+                  text $path.leaf($lockfile): complement with $sync_add [$sync_cfg]
+                  ignored = $process.run(bpkg rep-add $sync_add -d "$sync_cfg")
+                  ignored = $process.run(bpkg rep-fetch --offline --trust-yes -d "$sync_cfg")
+                }
               }
             }
           }
-        }
 
-        # For each non-host config that has mismatched packages, collect the
-        # pending pins and apply them via the best available source config.
-        ran_pkg_build = false
-        prev_cfg = [null]
-        for lcfg: $linked_cfgs
-        {
-          if ($lcfg != $prev_cfg)
+          # For each non-host config that has mismatched packages, collect the
+          # pending pins and apply them via the best available source config.
+          ran_pkg_build = false
+          prev_cfg = [null]
+          for lcfg: $linked_cfgs
           {
-            prev_cfg = $lcfg
-
-            # Skip host-type configurations: they contain build-time tools
-            # managed separately by bdep.
-            cfg_type = $process.run_regex(\
-              bpkg cfg-info -d "$lcfg", \
-              '^type: (.+)', \
-              '\1')
-
-            if ($cfg_type != 'host')
+            if ($lcfg != $prev_cfg)
             {
-              # Snapshot all packages currently in this configuration as
-              # captured lines. process.run_regex uses full-line matching so
-              # the pattern must consume the entire output line; the trailing
-              # .+ ensures this. Name and version are then extracted via
-              # regex.replace (partial matching) in the comparison loop.
-              before_pkgs = $process.run_regex(\
-                bpkg pkg-status --all -d "$lcfg", \
-                '^!?(.+ configured .+)', \
+              prev_cfg = $lcfg
+
+              # Skip host-type configurations: they contain build-time tools
+              # managed separately by bdep.
+              cfg_type = $process.run_regex(\
+                bpkg cfg-info -d "$lcfg", \
+                '^type: (.+)', \
                 '\1')
 
-              pending_pins = [null]
-              for pin: $dep_pins
+              if ($cfg_type != 'host')
               {
-                pname = $regex.replace($pin, '^([^/]+)/.*', '\1')
-                pver  = $regex.replace($pin, '^[^/]+/(.*)', '\1')
+                # Snapshot all packages currently in this configuration as
+                # captured lines. process.run_regex uses full-line matching so
+                # the pattern must consume the entire output line; the trailing
+                # .+ ensures this. Name and version are then extracted via
+                # regex.replace (partial matching) in the comparison loop.
+                before_pkgs = $process.run_regex(\
+                  bpkg pkg-status --all -d "$lcfg", \
+                  '^!?(.+ configured .+)', \
+                  '\1')
 
-                for bpkg_entry: $before_pkgs
+                pending_pins = [null]
+                for pin: $dep_pins
                 {
-                  bname = $regex.replace($bpkg_entry, '^([^ ]+) .*', '\1')
-                  bver  = $regex.replace($bpkg_entry, '^.+ configured !?([^ ]+).*', '\1')
+                  pname = $regex.replace($pin, '^([^/]+)/.*', '\1')
+                  pver  = $regex.replace($pin, '^[^/]+/(.*)', '\1')
 
-                  if ($bname == $pname)
+                  for bpkg_entry: $before_pkgs
                   {
-                    # A pin without +N suffix matches any revision of that base
-                    # version (bpkg semantics: pkg-build X.Y.Z satisfies X.Y.Z+N).
-                    # Only compare full strings when the pin carries an explicit +N.
-                    pbase = $regex.replace($pver, '\+[0-9]+$', '')
-                    bbase = $regex.replace($bver, '\+[0-9]+$', '')
-                    if ($bbase != $pbase || \
-                        ($pver != $pbase && $bver != $pver))
+                    bname = $regex.replace($bpkg_entry, '^([^ ]+) .*', '\1')
+                    bver  = $regex.replace($bpkg_entry, '^.+ configured !?([^ ]+).*', '\1')
+
+                    if ($bname == $pname)
                     {
-                      text $path.leaf($lockfile): pinning $pname to $pver in $lcfg \(was $bver\)
-                      pending_pins += $pin
+                      # A pin without +N suffix matches any revision of that base
+                      # version (bpkg semantics: pkg-build X.Y.Z satisfies X.Y.Z+N).
+                      # Only compare full strings when the pin carries an explicit +N.
+                      pbase = $regex.replace($pver, '\+[0-9]+$', '')
+                      bbase = $regex.replace($bver, '\+[0-9]+$', '')
+                      if ($bbase != $pbase || \
+                          ($pver != $pbase && $bver != $pver))
+                      {
+                        text $path.leaf($lockfile): pinning $pname to $pver in $lcfg \(was $bver\)
+                        pending_pins += $pin
+                      }
+                      break
                     }
-                    break
                   }
                 }
-              }
 
-              if (!$null($pending_pins))
-              {
-                # Find a source configuration to run pkg-build from.
-                # Prefer lcfg itself; fall back to bpkg_cfg (the config that
-                # builds the lockfile package). The trailing .* ensures the
-                # pattern consumes the entire line as required by
-                # process.run_regex's full-line matching.
-                source_cfg = [null]
-                use_fallback = false
-                has_remote = $process.run_regex(\
-                  bpkg rep-list -d "$lcfg", \
-                  '^(pkg|git):.*', \
-                  '\1')
-                if (!$empty($has_remote))
-                  source_cfg = $lcfg
-                else
+                if (!$null($pending_pins))
                 {
+                  # Find a source configuration to run pkg-build from.
+                  # Prefer lcfg itself; fall back to bpkg_cfg (the config that
+                  # builds the lockfile package). The trailing .* ensures the
+                  # pattern consumes the entire line as required by
+                  # process.run_regex's full-line matching.
+                  source_cfg = [null]
+                  use_fallback = false
                   has_remote = $process.run_regex(\
-                    bpkg rep-list -d "$bpkg_cfg", \
+                    bpkg rep-list -d "$lcfg", \
                     '^(pkg|git):.*', \
                     '\1')
                   if (!$empty($has_remote))
+                    source_cfg = $lcfg
+                  else
                   {
-                    source_cfg = $bpkg_cfg
-                    use_fallback = true
+                    has_remote = $process.run_regex(\
+                      bpkg rep-list -d "$bpkg_cfg", \
+                      '^(pkg|git):.*', \
+                      '\1')
+                    if (!$empty($has_remote))
+                    {
+                      source_cfg = $bpkg_cfg
+                      use_fallback = true
+                    }
                   }
-                }
-                if ($null($source_cfg))
-                  fail $path.leaf($lockfile): cannot pin $pending_pins -- \
-                    no project configuration has remote package repositories
+                  if ($null($source_cfg))
+                    fail $path.leaf($lockfile): cannot pin $pending_pins -- \
+                      no project configuration has remote package repositories
 
-                # When using a fallback source config (different from lcfg),
-                # temporarily borrow source_cfg's remote repositories into
-                # lcfg so that bpkg pkg-build can resolve the pinned version,
-                # then remove them immediately after. Running pkg-build from
-                # lcfg itself keeps bpkg's hold-package db identity correct.
-                if ($use_fallback)
-                {
-                  # Extract remote repo URLs from source_cfg.
-                  # bpkg rep-list output: "<location> <url>".
-                  # Greedy .+ backtracks to the last space, so (.+) captures
-                  # the URL. process.run_regex may yield an empty-string
-                  # element for non-matching lines; the for-loops skip those.
-                  source_repos = [null]
-                  for r: $process.run_regex(\
-                    bpkg rep-list -d "$source_cfg", \
-                    '^pkg:.+ (.+)', '\1')
-                    source_repos += $r
-                  for r: $process.run_regex(\
-                    bpkg rep-list -d "$source_cfg", \
-                    '^git:.+ (.+)', '\1')
-                    source_repos += $r
-                  ignored = $process.run(bpkg rep-add $source_repos -d "$lcfg")
-                  ignored = $process.run(bpkg rep-fetch --trust-yes -d "$lcfg")
-                  ignored = $process.run(\
-                    bpkg pkg-build --yes --no-move --configure-only --leave-dependent $pending_pins -d "$lcfg")
-                  for srepo: $source_repos
-                    ignored = $process.run(bpkg rep-remove "$srepo" -d "$lcfg")
+                  # When using a fallback source config (different from lcfg),
+                  # temporarily borrow source_cfg's remote repositories into
+                  # lcfg so that bpkg pkg-build can resolve the pinned version,
+                  # then remove them immediately after. Running pkg-build from
+                  # lcfg itself keeps bpkg's hold-package db identity correct.
+                  if ($use_fallback)
+                  {
+                    # Extract remote repo URLs from source_cfg.
+                    # bpkg rep-list output: "<location> <url>".
+                    # Greedy .+ backtracks to the last space, so (.+) captures
+                    # the URL. process.run_regex may yield an empty-string
+                    # element for non-matching lines; the for-loops skip those.
+                    source_repos = [null]
+                    for r: $process.run_regex(\
+                      bpkg rep-list -d "$source_cfg", \
+                      '^pkg:.+ (.+)', '\1')
+                      source_repos += $r
+                    for r: $process.run_regex(\
+                      bpkg rep-list -d "$source_cfg", \
+                      '^git:.+ (.+)', '\1')
+                      source_repos += $r
+                    ignored = $process.run(bpkg rep-add $source_repos -d "$lcfg")
+                    ignored = $process.run(bpkg rep-fetch --trust-yes -d "$lcfg")
+                    ignored = $process.run(\
+                      bpkg pkg-build --yes --no-move --configure-only --leave-dependent $pending_pins -d "$lcfg")
+                    for srepo: $source_repos
+                      ignored = $process.run(bpkg rep-remove "$srepo" -d "$lcfg")
+                  }
+                  else
+                  {
+                    ignored = $process.run(\
+                      bpkg pkg-build --yes --no-move --configure-only --leave-dependent $pending_pins -d "$lcfg")
+                  }
+                  ran_pkg_build = true
                 }
-                else
-                {
-                  ignored = $process.run(\
-                    bpkg pkg-build --yes --no-move --configure-only --leave-dependent $pending_pins -d "$lcfg")
-                }
-                ran_pkg_build = true
               }
             }
           }
-        }
 
-        if ($ran_pkg_build)
-          ignored = $process.run(bdep sync --yes -d "$amg_root")
+          if ($ran_pkg_build)
+            ignored = $process.run(bdep sync --yes -d "$amg_root")
+        }
       }
     }
   }
