@@ -13,6 +13,7 @@
 # test body, then runs the test proper.
 
 set -uo pipefail
+unalias -a 2>/dev/null || true
 
 # Save the original stdout before any command-substitution redirects it.
 # _run and _capture write live output here so it reaches the terminal even
@@ -166,7 +167,7 @@ reset_installed() {
 }
 
 reset_lockfile() {
-  git -C "$PROJECT_DIR" checkout -- lockfile/bdep.lock || return 1
+  git -c core.hooksPath=/dev/null -C "$PROJECT_DIR" checkout -- lockfile/bdep.lock || return 1
 }
 
 regenerate_lockfile() {
