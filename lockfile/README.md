@@ -16,14 +16,13 @@ correct version by:
 2. For each configuration with a version mismatch, running:
 
    ```
-   bpkg pkg-build --yes <name>/<ver> ... -d <cfg>
+   bpkg pkg-build --yes --configure-only --no-move --leave-dependent <name>/<ver> ... -d <cfg>
    ```
 
-   This keeps all packages in the configuration they already belong to. `bpkg`
-   handles the full dependency graph within that configuration, including any
-   same-configuration dependents that need to be reconfigured against the new
-   versions. Host-type configurations (build-time tools managed by `bdep`) are
-   skipped.
+   `--configure-only` and `--no-move` restrict the operation to reconfiguring
+   the pinned packages in place. `--leave-dependent` prevents bpkg from touching
+   dependents of the pinned packages. Those are handled by `bdep sync` in step 3.
+   Host-type configurations (build-time tools managed by `bdep`) are skipped.
 
 3. Running `bdep sync` once (if any version was changed) to re-configure the
    project packages that were affected.
