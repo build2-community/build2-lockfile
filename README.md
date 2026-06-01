@@ -8,8 +8,8 @@ A lockfile records the exact versions of external dependencies so that every
 developer and CI run builds against the same packages. Without one, `bdep sync`
 resolves the latest versions that satisfy the declared constraints, which can
 differ over time. The `lockfile` build2 package enforces pinned versions on
-every build by re-configuring any package that has drifted from its recorded
-version before the build proceeds.
+every (explicit) build by re-configuring any package that has drifted from its
+recorded version before the build proceeds.
 
 ## About this workspace
 
