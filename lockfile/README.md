@@ -5,8 +5,8 @@ A build2 package that pins external dependency versions for the entire project's
 
 ## How it works
 
-On every build, `build/lockfile.build` (sourced from `bootstrap.build`) reads
-`bdep.lock` from this package's source directory. If the file contains pins and
+When built (`b lockfile/`), `build/lockfile.build` (sourced from `bootstrap.build`)
+reads `bdep.lock` from this package's source directory. If the file contains pins and
 any pinned package is at a different version than the pin, it enforces the
 correct version by:
 
@@ -38,8 +38,17 @@ workspace root):
 b config.lockfile.lock=true lockfile/
 ```
 
-Then commit the updated `bdep.lock`. On every subsequent build, the pinned
-versions are enforced automatically.
+Then commit the updated `bdep.lock`. To enforce the pins, run:
+
+```
+b lockfile/
+```
+
+Note: `bdep sync` and `bdep update` do not trigger enforcement automatically.
+The enforcement logic runs in `bootstrap.build`, not as a build target, so neither
+command triggers it.
+Additionally, `bdep sync` uses the configure meta-operation, which `lockfile.build`
+skips by design.
 
 To skip enforcement for one build:
 
