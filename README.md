@@ -1,5 +1,18 @@
 # hello-lockfile
 
+> Unofficial proof-of-concept. Version pinning is on the [build2 roadmap](https://github.com/build2/README/blob/master/roadmap.md#important) but not yet available as a built-in feature.
+
+## What is a lockfile?
+
+A lockfile records the exact versions of external dependencies so that every
+developer and CI run builds against the same packages. Without one, `bdep sync`
+resolves the latest versions that satisfy the declared constraints, which can
+differ over time. The `lockfile` build2 package enforces pinned versions on
+every build by re-configuring any package that has drifted from its recorded
+version before the build proceeds.
+
+## About this workspace
+
 Development workspace for the `lockfile` build2 package. `libhello` and
 `libworld` are example C++ libraries that depend on `fmt`, `spdlog`, and
 `entt`, providing a realistic multi-package project for exercising `lockfile`
