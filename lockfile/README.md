@@ -37,20 +37,21 @@ workspace root):
 ```
 b config.lockfile.lock=true lockfile/
 ```
+> **NOTE**: If you're blocked by the `unable to downgrade/upgrade package libxxx` error,
+first remove `lockfile/bdep.lock` and run again.
 
 Then commit the updated `bdep.lock`. To enforce the pins, run:
 
 ```
 b lockfile/
 ```
-
-Note: `bdep sync` and `bdep update` do not trigger enforcement automatically.
+> **NOTE**: `bdep sync` and `bdep update` do not trigger enforcement automatically.
 The enforcement logic runs in `bootstrap.build`, not as a build target, so neither
 command triggers it.
 Additionally, `bdep sync` uses the configure meta-operation, which `lockfile.build`
 skips by design.
 
-To skip enforcement for one build:
+Enforcement is skipped if `BDEP_SYNC` isn't either `1` or `true`:
 
 ```
 BDEP_SYNC=false b
