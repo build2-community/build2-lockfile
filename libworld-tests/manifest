@@ -3,7 +3,7 @@ name: libworld-tests
 version: 0.1.0-a.0.z
 type: exe
 language: c++
-project: hello
+project: hello-lockfile
 summary: libworld-tests C++ executable
 license: MIT
 description-file: README.md

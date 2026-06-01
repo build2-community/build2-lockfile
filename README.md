@@ -1,4 +1,4 @@
-# hello
+# hello-lockfile
 
 Development workspace for the `lockfile` build2 package. `libhello` and
 `libworld` are example C++ libraries that depend on `fmt`, `spdlog`, and

@@ -94,9 +94,9 @@ esac
 unset _compiler _c _exe
 
 CONFIG_NAME_EXT=${CONFIG_NAME}-external
-BUILD_DIR_HOST=${PROJECT_DIR}/../hello-host
-BUILD_DIR=${PROJECT_DIR}/../hello-${CONFIG_NAME}
-BUILD_DIR_EXT=${PROJECT_DIR}/../hello-${CONFIG_NAME_EXT}
+BUILD_DIR_HOST=${PROJECT_DIR}/../hello-lockfile-host
+BUILD_DIR=${PROJECT_DIR}/../hello-lockfile-${CONFIG_NAME}
+BUILD_DIR_EXT=${PROJECT_DIR}/../hello-lockfile-${CONFIG_NAME_EXT}
 LOCKFILE=${PROJECT_DIR}/lockfile/bdep.lock
 
 # Baseline versions
@@ -105,8 +105,8 @@ SPDLOG_BASE='1.14.1+2'
 ENTT_BASE=3.14.0
 
 # Extra config vars (Group F only)
-BUILD_DIR_EXTRA="${PROJECT_DIR}/../hello-${CONFIG_NAME}-extra"
-UUID_EXTRA=$(printf '%s' "hello-${CONFIG_NAME}-extra" | md5sum | \
+BUILD_DIR_EXTRA="${PROJECT_DIR}/../hello-lockfile-${CONFIG_NAME}-extra"
+UUID_EXTRA=$(printf '%s' "hello-lockfile-${CONFIG_NAME}-extra" | md5sum | \
   awk '{printf "%s-%s-%s-%s-%s",
        substr($1,1,8),substr($1,9,4),substr($1,13,4),substr($1,17,4),substr($1,21,12)}')
 

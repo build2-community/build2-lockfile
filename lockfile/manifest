@@ -2,7 +2,7 @@
 name: lockfile
 version: 0.1.0-a.0.z
 type: other
-project: hello
+project: hello-lockfile
 summary: pin external dependency versions via bdep sync
 license: MIT
 description-file: README.md

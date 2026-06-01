@@ -2,7 +2,7 @@
 name: libhello
 version: 0.1.0-a.0.z
 language: c++
-project: hello
+project: hello-lockfile
 summary: hello C++ library
 license: MIT
 description-file: README.md
