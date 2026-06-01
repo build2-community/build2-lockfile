@@ -233,7 +233,7 @@ _init_configs() {
 assert_contains() {
   local output="$1" pattern="$2"
   if ! printf '%s' "$output" | grep -qE "$pattern"; then
-    printf 'expected pattern not found: %s\n' "$pattern"
+    printf 'expected pattern not found: %s\n--------------------------------------\n%s\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n' "$pattern" "$output"
     return 1
   fi
 }
@@ -242,7 +242,7 @@ assert_contains() {
 assert_not_contains() {
   local output="$1" pattern="$2"
   if printf '%s' "$output" | grep -qE "$pattern"; then
-    printf 'unexpected pattern found: %s\n' "$pattern"
+    printf 'unexpected pattern found: %s\n--------------------------------------\n%s\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n' "$pattern" "$output"
     return 1
   fi
 }
@@ -253,7 +253,7 @@ assert_uptodate() {
   local out="$1" cfg="$2"
   local pattern="^info:.*hello-lockfile-${cfg}.*is up to date$"
   if [[ ! "$out" =~ $pattern ]]; then
-    printf 'expected sole up-to-date output, got:\n%s\n' "$out"
+    printf 'expected sole up-to-date output, got:\n--------------------------------------\n%s\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n' "$out"
     return 1
   fi
 }
@@ -264,11 +264,11 @@ assert_version() {
   local status
   status=$(bpkg pkg-status "$pkg" -d "$cfg" 2>&1)
   if ! printf '%s' "$status" | grep -qE "^!?${pkg} configured"; then
-    printf '%s: expected %s, got: %s\n' "$pkg" "$ver" "$status"
+    printf '%s: expected %s, got:\n--------------------------------------\n%s\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n' "$pkg" "$ver" "$status"
     return 1
   fi
   if ! printf '%s' "$status" | grep -qF "$ver"; then
-    printf '%s: expected %s, got: %s\n' "$pkg" "$ver" "$status"
+    printf '%s: expected %s, got:\n--------------------------------------\n%s\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n' "$pkg" "$ver" "$status"
     return 1
   fi
 }
@@ -304,7 +304,7 @@ run_test() {
   else
     _fail "Case $(printf '%2d' "$num"): $desc"
     if [ -n "$detail" ]; then
-      printf '  %s\n' "$detail" | head -10
+      printf '  %s\n' "$detail"
     fi
   fi
 
@@ -318,6 +318,7 @@ run_test() {
 t_absent_lockfile() {
   _desc "absent lockfile is a no-op"
   mv "$LOCKFILE" "${LOCKFILE}.bak"
+  bdep sync --yes -d "$PROJECT_DIR" >/dev/null 2>&1
   local out
   out=$(_capture b lockfile/) || return 1
   mv "${LOCKFILE}.bak" "$LOCKFILE"
@@ -328,6 +329,7 @@ add_test t_absent_lockfile
 t_empty_lockfile() {
   _desc "empty lockfile is a no-op"
   printf '' > "$LOCKFILE"
+  bdep sync --yes -d "$PROJECT_DIR" >/dev/null 2>&1
   local out
   out=$(_capture b lockfile/) || return 1
   assert_uptodate "$out" "$CONFIG_NAME"
@@ -337,6 +339,7 @@ add_test t_empty_lockfile
 t_comments_only() {
   _desc "comments-only lockfile is a no-op"
   printf '# no pins\n\n' > "$LOCKFILE"
+  bdep sync --yes -d "$PROJECT_DIR" >/dev/null 2>&1
   local out
   out=$(_capture b lockfile/) || return 1
   assert_uptodate "$out" "$CONFIG_NAME"
@@ -426,6 +429,7 @@ t_revision_no_explicit_n() {
   # bpkg treats X.Y.Z as satisfied by X.Y.Z+N, so 1.14.1 must NOT trigger
   # enforcement against an installed 1.14.1+2 -- that would loop forever.
   sed_i 's|^spdlog/\([0-9.]*\)+[0-9]*|spdlog/\1|' "$LOCKFILE"
+  bdep sync --yes -d "$PROJECT_DIR" >/dev/null 2>&1
   local out
   out=$(_capture b lockfile/) || return 1
   assert_uptodate "$out" "$CONFIG_NAME"
