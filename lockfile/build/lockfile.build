@@ -118,68 +118,6 @@ if ($build.mode         != 'skeleton'    && \
             '^[^ ]+ \[([^\]]*)\] configured.*', \
             '\1'))
 
-          # Pre-step: sync remote repositories across bpkg_cfg and the configs it
-          # directly links to. bpkg cfg-info --link lists bpkg_cfg itself first,
-          # then each linked config. Only non-host configs are considered.
-          # This patches setups where the init/deinit dance left linked configs
-          # without direct remote repos.
-          sync_cfgs  = $process.run_regex(\
-            bpkg cfg-info --link -d "$bpkg_cfg", '^path: (.+)', '\1')
-          sync_repos = [null]
-          for sync_cfg: $sync_cfgs
-          {
-            sync_ctype = $process.run_regex(\
-              bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
-            if ($sync_ctype != 'host')
-            {
-              for r: $process.run_regex(\
-                bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
-                sync_repos += $r
-              for r: $process.run_regex(\
-                bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
-                sync_repos += $r
-            }
-          }
-          if (!$null($sync_repos))
-          {
-            for sync_cfg: $sync_cfgs
-            {
-              sync_ctype = $process.run_regex(\
-                bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
-              if ($sync_ctype != 'host')
-              {
-                sync_have = [null]
-                for r: $process.run_regex(\
-                  bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
-                  sync_have += $r
-                for r: $process.run_regex(\
-                  bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
-                  sync_have += $r
-                sync_add = [null]
-                for r: $sync_repos
-                {
-                  sync_found = false
-                  for h: $sync_have
-                  {
-                    if ($h == $r)
-                    {
-                      sync_found = true
-                      break
-                    }
-                  }
-                  if (!$sync_found)
-                    sync_add += $r
-                }
-                if (!$null($sync_add))
-                {
-                  text $path.leaf($lockfile): complement with $sync_add [$sync_cfg]
-                  ignored = $process.run(bpkg rep-add $sync_add -d "$sync_cfg")
-                  ignored = $process.run(bpkg rep-fetch --offline --trust-yes -d "$sync_cfg")
-                }
-              }
-            }
-          }
-
           # For each non-host config that has mismatched packages, collect the
           # pending pins and apply them via the best available source config.
           ran_pkg_build = false
@@ -240,6 +178,69 @@ if ($build.mode         != 'skeleton'    && \
 
                 if (!$null($pending_pins))
                 {
+                  # Pre-step: sync remote repositories across bpkg_cfg and the configs it
+                  # directly links to. bpkg cfg-info --link lists bpkg_cfg itself first,
+                  # then each linked config. Only non-host configs are considered.
+                  # This patches setups where the init/deinit dance left linked configs
+                  # without direct remote repos.
+                  sync_cfgs  = $process.run_regex(\
+                    bpkg cfg-info --link -d "$bpkg_cfg", '^path: (.+)', '\1')
+                  sync_repos = [null]
+                  for sync_cfg: $sync_cfgs
+                  {
+                    sync_ctype = $process.run_regex(\
+                      bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
+                    if ($sync_ctype != 'host')
+                    {
+                      for r: $process.run_regex(\
+                        bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
+                        sync_repos += $r
+                      for r: $process.run_regex(\
+                        bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
+                        sync_repos += $r
+                    }
+                  }
+
+                  if (!$null($sync_repos))
+                  {
+                    for sync_cfg: $sync_cfgs
+                    {
+                      sync_ctype = $process.run_regex(\
+                        bpkg cfg-info -d "$sync_cfg", '^type: (.+)', '\1')
+                      if ($sync_ctype != 'host')
+                      {
+                        sync_have = [null]
+                        for r: $process.run_regex(\
+                          bpkg rep-list -d "$sync_cfg", '^pkg:.+ (.+)', '\1')
+                          sync_have += $r
+                        for r: $process.run_regex(\
+                          bpkg rep-list -d "$sync_cfg", '^git:.+ (.+)', '\1')
+                          sync_have += $r
+                        sync_add = [null]
+                        for r: $sync_repos
+                        {
+                          sync_found = false
+                          for h: $sync_have
+                          {
+                            if ($h == $r)
+                            {
+                              sync_found = true
+                              break
+                            }
+                          }
+                          if (!$sync_found)
+                            sync_add += $r
+                        }
+                        if (!$null($sync_add))
+                        {
+                          text $path.leaf($lockfile): complement with $sync_add [$sync_cfg]
+                          ignored = $process.run(bpkg rep-add $sync_add -d "$sync_cfg")
+                          ignored = $process.run(bpkg rep-fetch --offline --trust-yes -d "$sync_cfg")
+                        }
+                      }
+                    }
+                  }
+
                   # Find a source configuration to run pkg-build from.
                   # Prefer lcfg itself; fall back to bpkg_cfg (the config that
                   # builds the lockfile package). The trailing .* ensures the
