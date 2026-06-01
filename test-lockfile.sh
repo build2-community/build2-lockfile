@@ -667,7 +667,7 @@ t_config_uuid_target_has_repos() {
   _run bpkg rep-fetch --trust-yes -d "$BUILD_DIR_EXT" || return 1
 
   local out rc=0
-  out=$(_capture bpkg pkg-build --yes --no-move \
+  out=$(_capture bpkg pkg-build --yes --configure-only --no-move \
     '{' "--config-uuid=$ext_uuid" '}+' \
     "fmt/10.1.1" \
     -d "$BUILD_DIR") || rc=$?
@@ -680,7 +680,7 @@ t_config_uuid_target_has_repos() {
   fi
 
   # Restore fmt and remove the borrowed legacy repo regardless of outcome.
-  _run bpkg pkg-build --yes "fmt/${FMT_BASE}" -d "$BUILD_DIR_EXT"
+  _run bpkg pkg-build --yes --configure-only "fmt/${FMT_BASE}" -d "$BUILD_DIR_EXT"
   _run bpkg rep-remove "$legacy_url" -d "$BUILD_DIR_EXT"
 
   return $rc
@@ -711,7 +711,7 @@ _setup_extra_config() {
   _run bpkg cfg-link --directory "$BUILD_DIR" "$BUILD_DIR_EXTRA" --relative || return 1
 
   # Install entt/3.15.0 in extra (this will be the "installed" version).
-  _run bpkg pkg-build --yes "entt/3.15.0" -d "$BUILD_DIR_EXTRA" || return 1
+  _run bpkg pkg-build --yes --configure-only "entt/3.15.0" -d "$BUILD_DIR_EXTRA" || return 1
 
   # Drop entt from external (libhello-tests is a cross-config dependent).
   _run bpkg pkg-drop --yes --drop-dependent entt -d "$BUILD_DIR_EXT" || return 1
@@ -723,7 +723,7 @@ _setup_extra_config() {
 
 _teardown_extra_config() {
   # Re-install entt at baseline in external before removing extra.
-  _run bpkg pkg-build --yes "entt/${ENTT_BASE}" -d "$BUILD_DIR_EXT" || true
+  _run bpkg pkg-build --yes --configure-only "entt/${ENTT_BASE}" -d "$BUILD_DIR_EXT" || true
   _run bpkg pkg-drop --yes --drop-dependent entt -d "$BUILD_DIR_EXTRA" || true
   _run bdep sync --yes -d "$PROJECT_DIR" || true
 
