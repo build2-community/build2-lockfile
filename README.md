@@ -1,67 +1,30 @@
-# hello - lockfile demo workspace
+# hello
 
 Development workspace for the `lockfile` build2 package. `libhello` and
 `libworld` are example C++ libraries that depend on `fmt`, `spdlog`, and
-`entt` - providing a realistic multi-configuration project for exercising
-`lockfile` enforcement.
+`entt`, providing a realistic multi-package project for exercising `lockfile`
+enforcement.
 
-## Setup
+See [`lockfile/README.md`](lockfile/README.md) for documentation on the
+`lockfile` package and how to integrate it into your own project.
 
-The workspace uses three linked `bpkg` configurations. The **host** config
-holds build-time tools managed separately by bdep.
-The **$CONFIG_NAME-external** config fetches and holds third-party packages
-from cppget.org. The **$CONFIG_NAME** config is where the local packages are
-built; it resolves external dependencies through a cfg-link to
-`$CONFIG_NAME-external`.
+## Test suite
 
-Adjust `CONFIG_NAME` for your compiler (`msvc`, `gcc`, etc.).
+`test-lockfile.sh` exercises `lockfile` enforcement end-to-end. On each run
+it creates a fresh three-config bpkg topology: a host config for build-time
+tools, a main config where the local packages are built, and an external config
+that holds third-party packages fetched from cppget.org. The main config
+resolves external dependencies through a cfg-link to the external config.
 
-```sh
-CONFIG_NAME=msvc
-BASE=$(basename $(git rev-parse --show-toplevel))
-
-# Create configurations
-bpkg cfg-create --name host                    --directory ../$BASE-host                    --type host --wipe cc config.config.load=~host
-bpkg cfg-create --name $CONFIG_NAME            --directory ../$BASE-$CONFIG_NAME            --wipe cc
-bpkg cfg-create --name $CONFIG_NAME-external   --directory ../$BASE-$CONFIG_NAME-external   --wipe cc
-
-# Register package repositories in the external config
-bpkg rep-add https://pkg.cppget.org/1/stable https://pkg.cppget.org/1/testing \
-  -d ../$BASE-$CONFIG_NAME-external
-bpkg rep-fetch -d ../$BASE-$CONFIG_NAME-external
-
-# Link main -> external
-bpkg cfg-link --directory ../$BASE-$CONFIG_NAME ../$BASE-$CONFIG_NAME-external --relative
-
-# Init bdep and add all three configs
-bdep init --empty
-bdep config add @host                  ../$BASE-host                    --no-default --forward
-bdep config add @$CONFIG_NAME-external ../$BASE-$CONFIG_NAME-external   --no-default --no-forward
-bdep config add @$CONFIG_NAME          ../$BASE-$CONFIG_NAME            --no-default --no-forward
-bdep config set @$CONFIG_NAME          --default --forward
-
-# Fetch third-party deps into external, then drop the local packages
-bdep init @$CONFIG_NAME-external \
-  -d libhello -d libworld -d libhello-tests -d libworld-tests -d lockfile
-bdep deinit @$CONFIG_NAME-external --force \
-  -d libhello -d libworld -d libhello-tests -d libworld-tests -d lockfile
-bpkg pkg-drop -d ../$BASE-$CONFIG_NAME-external --keep-unused --drop-dependent --yes \
-  libhello libworld libhello-tests libworld-tests lockfile
-
-# Init local packages into main config
-bdep init @$CONFIG_NAME --no-sync \
-  -d libhello -d libworld -d libhello-tests -d libworld-tests -d lockfile
-bdep sync --upgrade --yes
-```
-
-## Lockfile tests
+The suite covers no-op behaviour when pins already match, version enforcement
+for single and multiple packages, transitive dependencies across linked configs,
+host-config skipping, the `BDEP_SYNC=false` bypass, CRLF-safe parsing, and
+lockfile generation.
 
 ```sh
 bash test-lockfile.sh [--compiler=<path>] [--quiet] [--case=N] [--list]
 ```
 
-`--compiler` specifies the compiler to use (e.g. `g++` or `/usr/bin/clang++`).
-If omitted, the script auto-detects the first of `g++`, `clang++`, or `cl.exe`
+`--compiler` accepts a compiler path such as `g++` or `/usr/bin/clang++`. If
+omitted, the script auto-detects the first of `g++`, `clang++`, or `cl.exe`
 found in `PATH`.
-
-See [`lockfile/README.md`](lockfile/README.md) for lockfile package documentation.
