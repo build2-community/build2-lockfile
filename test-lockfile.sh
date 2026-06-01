@@ -27,6 +27,7 @@ NC='\033[0m'
 
 PASS_COUNT=0
 FAIL_COUNT=0
+_FAILED=()
 
 QUIET=false
 CASE_FILTER=''
@@ -303,6 +304,7 @@ run_test() {
     _pass "Case $(printf '%2d' "$num"): $desc"
   else
     _fail "Case $(printf '%2d' "$num"): $desc"
+    _FAILED+=("Case $(printf '%2d' "$num"): $desc")
     if [ -n "$detail" ]; then
       printf '  %s\n' "$detail"
     fi
@@ -836,4 +838,10 @@ done
 
 echo ""
 printf '%d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"
+if [ "${#_FAILED[@]}" -gt 0 ]; then
+  echo ""
+  for _f in "${_FAILED[@]}"; do
+    printf "${RED}[FAIL]${NC} %s\n" "$_f"
+  done
+fi
 [ "$FAIL_COUNT" -eq 0 ]
