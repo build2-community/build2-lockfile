@@ -555,6 +555,21 @@ t_generation_captures_state() {
 }
 add_test t_generation_captures_state
 
+t_generation_insource() {
+  _desc "generated bdep.lock lands in source dir as a regular file"
+  rm -f "$LOCKFILE"
+  regenerate_lockfile || return 1
+  if [ ! -f "$LOCKFILE" ]; then
+    printf 'bdep.lock not found at %s\n' "$LOCKFILE"
+    return 1
+  fi
+  if [ -L "$LOCKFILE" ]; then
+    printf 'bdep.lock is a symlink, expected a regular file\n'
+    return 1
+  fi
+}
+add_test t_generation_insource
+
 # --------------------------------------------------------------------------
 # Group E: Edge cases (cases 20-24)
 # --------------------------------------------------------------------------
