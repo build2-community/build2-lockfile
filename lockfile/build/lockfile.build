@@ -267,7 +267,7 @@ if ($build.mode         != 'skeleton'    && \
                     }
                   }
                   if ($null($source_cfg))
-                    fail "lockfile:" cannot pin $pending_pins -- \
+                    fail "lockfile:" cannot pin $pending_pins: \
                       no project configuration has remote package repositories
 
                   # When using a fallback source config (different from lcfg),
@@ -295,8 +295,6 @@ if ($build.mode         != 'skeleton'    && \
                     ignored = $process.run(bpkg rep-fetch --trust-yes -d "$lcfg")
                     ignored = $process.run(\
                       bpkg pkg-build --yes --no-move --configure-only --leave-dependent $pending_pins -d "$lcfg")
-                    for srepo: $source_repos
-                      ignored = $process.run(bpkg rep-remove "$srepo" -d "$lcfg")
                   }
                   else
                   {
