@@ -168,7 +168,7 @@ if ($build.mode         != 'skeleton'    && \
                       if ($bbase != $pbase || \
                           ($pver != $pbase && $bver != $pver))
                       {
-                        text $path.leaf($lockfile): pinning $pname to $pver in $lcfg \(was $bver\)
+                        text "lockfile:" pinning $pname to $pver in $lcfg \(was $bver\)
                         pending_pins += $pin
                       }
                       break
@@ -233,7 +233,7 @@ if ($build.mode         != 'skeleton'    && \
                         }
                         if (!$null($sync_add))
                         {
-                          text $path.leaf($lockfile): complement with $sync_add [$sync_cfg]
+                          text "lockfile:" complement with $sync_add [$sync_cfg]
                           ignored = $process.run(bpkg rep-add $sync_add -d "$sync_cfg")
                           ignored = $process.run(bpkg rep-fetch --offline --trust-yes -d "$sync_cfg")
                         }
@@ -267,7 +267,7 @@ if ($build.mode         != 'skeleton'    && \
                     }
                   }
                   if ($null($source_cfg))
-                    fail $path.leaf($lockfile): cannot pin $pending_pins -- \
+                    fail "lockfile:" cannot pin $pending_pins -- \
                       no project configuration has remote package repositories
 
                   # When using a fallback source config (different from lcfg),

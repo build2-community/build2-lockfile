@@ -64,7 +64,10 @@ if ($config.lockfile.lock)
     }
   }
 
-  pins = $sort($pins)
+  ife! $pins
+    pins = $sort($pins)
+  else
+    fail "lockfile: no dependencies found"
 }
 
 file{bdep.lock}@./:
