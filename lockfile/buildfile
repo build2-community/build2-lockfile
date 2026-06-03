@@ -29,7 +29,7 @@ if ($config.lockfile.lock)
   # Host configs hold build-time tools managed separately by bdep.
   pins     = [null]
   prev_cfg = [null]
-  for lcfg: $linked_cfgs
+  for lcfg: $cfg $linked_cfgs
   {
     if ($lcfg != $prev_cfg)
     {
